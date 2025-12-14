@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { getAllItems, addItem, updateItem, deleteItem, RoomType } from "@/lib/db";
 import { uid } from "@/lib/id";
 import { nowIso } from "@/lib/dates";
@@ -164,6 +164,9 @@ export default function RoomTypes() {
               <DialogTitle>
                 {editingType ? "Edit Room Type" : "Add New Room Type"}
               </DialogTitle>
+              <DialogDescription>
+                {editingType ? "Update the room type details below." : "Fill in the details to create a new room type."}
+              </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">

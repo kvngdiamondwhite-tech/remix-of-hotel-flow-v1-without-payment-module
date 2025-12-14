@@ -59,8 +59,25 @@ export interface Booking {
 
 let dbInstance: IDBDatabase | null = null;
 
+function isConnectionValid(db: IDBDatabase | null): boolean {
+  if (!db) return false;
+  try {
+    // Try to access objectStoreNames - this will throw if connection is closed
+    db.objectStoreNames;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function initDB(): Promise<IDBDatabase> {
-  if (dbInstance) return dbInstance;
+  // Check if existing connection is still valid
+  if (dbInstance && isConnectionValid(dbInstance)) {
+    return dbInstance;
+  }
+  
+  // Clear stale reference
+  dbInstance = null;
 
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -68,6 +85,16 @@ export async function initDB(): Promise<IDBDatabase> {
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
       dbInstance = request.result;
+      
+      // Handle connection closing unexpectedly
+      dbInstance.onclose = () => {
+        dbInstance = null;
+      };
+      
+      dbInstance.onerror = () => {
+        dbInstance = null;
+      };
+      
       resolve(dbInstance);
     };
 
