@@ -11,6 +11,7 @@ import Rooms from "./pages/Rooms";
 import Guests from "./pages/Guests";
 import Bookings from "./pages/Bookings";
 import Payments from "./pages/Payments";
+import Debt from "./pages/Debt";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import { initDB } from "./lib/db";
@@ -39,6 +40,7 @@ const App = () => {
               <Route path="/guests" element={<Guests />} />
               <Route path="/bookings" element={<Bookings />} />
               <Route path="/payments" element={<Payments />} />
+              <Route path="/debt" element={<Debt />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
