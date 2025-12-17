@@ -6,11 +6,25 @@ export function useSettings() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setSettings(getSettings());
+    const loadedSettings = getSettings();
+    setSettings(loadedSettings);
     setLoading(false);
+
+    // Apply dark mode on initial load
+    if (loadedSettings.darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
 
     const handleUpdate = (e: CustomEvent<HotelSettings>) => {
       setSettings(e.detail);
+      // Apply dark mode when settings change
+      if (e.detail.darkMode) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
     };
 
     window.addEventListener('settings-updated', handleUpdate as EventListener);
