@@ -1,6 +1,7 @@
 import { Booking, Guest, Room, RoomType } from './db';
 import { formatDate, formatDateTime } from './dates';
 import { formatCurrency } from './calculations';
+import { getSettings } from './settings';
 
 export function generateReceipt(
   booking: Booking,
@@ -8,6 +9,7 @@ export function generateReceipt(
   room: Room,
   roomType: RoomType
 ): string {
+  const settings = getSettings();
   return `
 <!DOCTYPE html>
 <html>
@@ -95,7 +97,10 @@ export function generateReceipt(
 </head>
 <body>
   <div class="header">
-    <h1>HotelFlow Management System</h1>
+    ${settings.logo ? `<img src="${settings.logo}" alt="Logo" style="max-height: 60px; max-width: 200px; margin-bottom: 10px;" />` : ''}
+    <h1>${settings.hotelName}</h1>
+    ${settings.address ? `<p style="margin: 5px 0; color: #666;">${settings.address}</p>` : ''}
+    ${settings.phone || settings.email ? `<p style="margin: 5px 0; color: #666;">${[settings.phone, settings.email].filter(Boolean).join(' | ')}</p>` : ''}
     <p>Booking Receipt</p>
   </div>
 
@@ -195,7 +200,7 @@ export function generateReceipt(
   ` : ''}
 
   <div class="footer">
-    <p>Thank you for choosing HotelFlow Management System</p>
+    <p>Thank you for choosing ${settings.hotelName}</p>
     <p>Generated on ${formatDateTime(new Date().toISOString())}</p>
   </div>
 

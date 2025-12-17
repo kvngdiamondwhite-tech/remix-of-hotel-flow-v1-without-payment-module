@@ -3,8 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAllItems, Room, Booking } from "@/lib/db";
 import { DoorOpen, Calendar, CheckCircle, Clock } from "lucide-react";
 import { todayIso } from "@/lib/dates";
+import { useSettings } from "@/hooks/useSettings";
 
 export default function Dashboard() {
+  const { settings } = useSettings();
   const [stats, setStats] = useState({
     totalRooms: 0,
     availableRooms: 0,
@@ -76,9 +78,18 @@ export default function Dashboard() {
 
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Welcome to HotelFlow Management System</p>
+      <div className="mb-8 flex items-center gap-4">
+        {settings.logo && (
+          <img 
+            src={settings.logo} 
+            alt="Hotel logo" 
+            className="h-14 w-14 object-contain rounded-lg"
+          />
+        )}
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground mt-1">Welcome to {settings.hotelName}</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">

@@ -50,9 +50,21 @@ export function calculateTotal(
   return clampMoney(subtotal - discountAmt + surchargeAmt);
 }
 
-export function formatCurrency(amount: number): string {
+export function formatCurrency(amount: number, currencyOverride?: string): string {
+  // Get currency from settings if available
+  let currency = 'USD';
+  try {
+    const stored = localStorage.getItem('hotel_settings');
+    if (stored) {
+      const settings = JSON.parse(stored);
+      currency = settings.currency || 'USD';
+    }
+  } catch {
+    // Use default
+  }
+  
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'USD'
+    currency: currencyOverride || currency,
   }).format(amount);
 }

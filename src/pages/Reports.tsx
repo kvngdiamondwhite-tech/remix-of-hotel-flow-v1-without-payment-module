@@ -11,6 +11,7 @@ import { formatCurrency } from "@/lib/calculations";
 import { formatDate } from "@/lib/dates";
 import { FileText, Calendar, DollarSign, TrendingUp, Users, Building, Printer } from "lucide-react";
 import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
+import { useSettings } from "@/hooks/useSettings";
 
 interface ReportData {
   bookings: Booking[];
@@ -21,6 +22,7 @@ interface ReportData {
 }
 
 export default function Reports() {
+  const { settings } = useSettings();
   const [data, setData] = useState<ReportData>({
     bookings: [],
     guests: [],
@@ -211,10 +213,26 @@ export default function Reports() {
 
   return (
     <div className="p-8 print:p-4">
-      <div className="mb-8 flex justify-between items-start print:hidden">
+      {/* Print Header - only visible when printing */}
+      <div className="hidden print:flex print:items-center print:gap-4 print:mb-6 print:pb-4 print:border-b">
+        {settings.logo && (
+          <img src={settings.logo} alt="Logo" className="h-12 w-12 object-contain" />
+        )}
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Reports</h1>
-          <p className="text-muted-foreground mt-1">View financial and operational summaries</p>
+          <h1 className="text-xl font-bold">{settings.hotelName}</h1>
+          {settings.address && <p className="text-sm text-muted-foreground">{settings.address}</p>}
+        </div>
+      </div>
+      
+      <div className="mb-8 flex justify-between items-start print:hidden">
+        <div className="flex items-center gap-4">
+          {settings.logo && (
+            <img src={settings.logo} alt="Hotel logo" className="h-12 w-12 object-contain rounded-lg" />
+          )}
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Reports</h1>
+            <p className="text-muted-foreground mt-1">View financial and operational summaries</p>
+          </div>
         </div>
         <Button onClick={handlePrint} variant="outline">
           <Printer className="h-4 w-4 mr-2" />
