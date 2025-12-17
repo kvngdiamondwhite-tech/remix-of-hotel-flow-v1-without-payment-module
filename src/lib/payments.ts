@@ -8,7 +8,7 @@ import { nowIso } from './dates';
 export interface Payment {
   id: string;
   bookingId: string;
-  paymentMethod: 'cash' | 'transfer' | 'pos';
+  paymentMethod: string; // Dynamic - uses payment method ID from settings
   paymentType: 'deposit' | 'full' | 'partial';
   amount: number;
   paymentDate: string;

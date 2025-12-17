@@ -1,16 +1,19 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, Upload, Database, AlertCircle, Building2, Image, X } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Download, Upload, Database, AlertCircle, Building2, Image, X, CreditCard, Clock, FileText, Settings2, Plus, Trash2, Edit2, Check } from "lucide-react";
 import { exportAllData, importData } from "@/lib/backup";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useSettings } from "@/hooks/useSettings";
-import { SUPPORTED_CURRENCIES, HotelSettings } from "@/lib/settings";
+import { SUPPORTED_CURRENCIES, HotelSettings, PaymentMethodConfig, DEFAULT_PAYMENT_METHODS } from "@/lib/settings";
+import { uid } from "@/lib/id";
 
 export default function Settings() {
   const [importing, setImporting] = useState(false);
@@ -19,12 +22,26 @@ export default function Settings() {
   const [formData, setFormData] = useState<HotelSettings>(settings);
   const [logoPreview, setLogoPreview] = useState<string>(settings.logo);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Payment method editing state
+  const [editingMethodId, setEditingMethodId] = useState<string | null>(null);
+  const [editingMethodName, setEditingMethodName] = useState("");
+  const [newMethodName, setNewMethodName] = useState("");
 
   // Sync form data when settings load
-  useState(() => {
+  useEffect(() => {
     setFormData(settings);
     setLogoPreview(settings.logo);
-  });
+  }, [settings]);
+
+  // Apply dark mode when settings change
+  useEffect(() => {
+    if (formData.darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [formData.darkMode]);
 
   const handleExport = async () => {
     try {
@@ -113,24 +130,83 @@ export default function Settings() {
     }
   };
 
-  const handleSaveProfile = () => {
+  const handleSave = () => {
     try {
       updateSettings(formData);
       toast({
         title: "Success",
-        description: "Business profile saved successfully",
+        description: "Settings saved successfully",
       });
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to save profile",
+        description: "Failed to save settings",
         variant: "destructive",
       });
     }
   };
 
-  const handleInputChange = (field: keyof HotelSettings, value: string) => {
+  const handleInputChange = (field: keyof HotelSettings, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Payment method handlers
+  const handleAddPaymentMethod = () => {
+    if (!newMethodName.trim()) {
+      toast({ title: "Error", description: "Please enter a method name", variant: "destructive" });
+      return;
+    }
+    const newMethod: PaymentMethodConfig = {
+      id: uid(),
+      name: newMethodName.trim(),
+      enabled: true,
+    };
+    setFormData(prev => ({
+      ...prev,
+      paymentMethods: [...prev.paymentMethods, newMethod],
+    }));
+    setNewMethodName("");
+  };
+
+  const handleTogglePaymentMethod = (id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      paymentMethods: prev.paymentMethods.map(pm =>
+        pm.id === id ? { ...pm, enabled: !pm.enabled } : pm
+      ),
+    }));
+  };
+
+  const handleDeletePaymentMethod = (id: string) => {
+    // Don't allow deleting the last payment method
+    if (formData.paymentMethods.length <= 1) {
+      toast({ title: "Error", description: "At least one payment method is required", variant: "destructive" });
+      return;
+    }
+    setFormData(prev => ({
+      ...prev,
+      paymentMethods: prev.paymentMethods.filter(pm => pm.id !== id),
+    }));
+  };
+
+  const handleEditPaymentMethod = (pm: PaymentMethodConfig) => {
+    setEditingMethodId(pm.id);
+    setEditingMethodName(pm.name);
+  };
+
+  const handleSavePaymentMethodName = () => {
+    if (!editingMethodName.trim()) {
+      toast({ title: "Error", description: "Method name cannot be empty", variant: "destructive" });
+      return;
+    }
+    setFormData(prev => ({
+      ...prev,
+      paymentMethods: prev.paymentMethods.map(pm =>
+        pm.id === editingMethodId ? { ...pm, name: editingMethodName.trim() } : pm
+      ),
+    }));
+    setEditingMethodId(null);
+    setEditingMethodName("");
   };
 
   return (
@@ -140,11 +216,27 @@ export default function Settings() {
         <p className="text-muted-foreground mt-1">Manage your data and application settings</p>
       </div>
 
-      <Tabs defaultValue="profile" className="max-w-2xl">
-        <TabsList className="mb-6">
+      <Tabs defaultValue="profile" className="max-w-3xl">
+        <TabsList className="mb-6 flex-wrap h-auto gap-1">
           <TabsTrigger value="profile">
             <Building2 className="h-4 w-4 mr-2" />
             Business Profile
+          </TabsTrigger>
+          <TabsTrigger value="payments">
+            <CreditCard className="h-4 w-4 mr-2" />
+            Payment Settings
+          </TabsTrigger>
+          <TabsTrigger value="booking">
+            <Clock className="h-4 w-4 mr-2" />
+            Booking Rules
+          </TabsTrigger>
+          <TabsTrigger value="receipt">
+            <FileText className="h-4 w-4 mr-2" />
+            Receipt & Printing
+          </TabsTrigger>
+          <TabsTrigger value="system">
+            <Settings2 className="h-4 w-4 mr-2" />
+            System Preferences
           </TabsTrigger>
           <TabsTrigger value="backup">
             <Database className="h-4 w-4 mr-2" />
@@ -152,6 +244,7 @@ export default function Settings() {
           </TabsTrigger>
         </TabsList>
 
+        {/* Business Profile Tab */}
         <TabsContent value="profile" className="space-y-6">
           <Card>
             <CardHeader>
@@ -278,13 +371,269 @@ export default function Settings() {
                 </p>
               </div>
 
-              <Button onClick={handleSaveProfile} className="w-full">
+              <Button onClick={handleSave} className="w-full">
                 Save Business Profile
               </Button>
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* Payment Settings Tab */}
+        <TabsContent value="payments" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Payment Methods</CardTitle>
+              <CardDescription>
+                Manage available payment methods. Disabled methods won't appear in payment forms but historical records remain unchanged.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Existing payment methods */}
+              <div className="space-y-2">
+                {formData.paymentMethods.map((pm) => (
+                  <div key={pm.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                    {editingMethodId === pm.id ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <Input
+                          value={editingMethodName}
+                          onChange={(e) => setEditingMethodName(e.target.value)}
+                          className="h-8"
+                          autoFocus
+                        />
+                        <Button size="sm" variant="ghost" onClick={handleSavePaymentMethodName}>
+                          <Check className="h-4 w-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingMethodId(null)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            checked={pm.enabled}
+                            onCheckedChange={() => handleTogglePaymentMethod(pm.id)}
+                          />
+                          <span className={pm.enabled ? "font-medium" : "text-muted-foreground line-through"}>
+                            {pm.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => handleEditPaymentMethod(pm)}>
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => handleDeletePaymentMethod(pm.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Add new payment method */}
+              <div className="flex gap-2 pt-2">
+                <Input
+                  placeholder="New payment method name..."
+                  value={newMethodName}
+                  onChange={(e) => setNewMethodName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddPaymentMethod()}
+                />
+                <Button onClick={handleAddPaymentMethod} variant="outline">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add
+                </Button>
+              </div>
+
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Historical payment records will not be affected when you modify or disable payment methods.
+                </AlertDescription>
+              </Alert>
+
+              <Button onClick={handleSave} className="w-full">
+                Save Payment Settings
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Booking Rules Tab */}
+        <TabsContent value="booking" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Debt Control</CardTitle>
+              <CardDescription>
+                Configure whether bookings can have outstanding balances
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <Label className="text-base">Allow Debt / Outstanding Balances</Label>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    When disabled, new bookings will require full payment. Existing debt records remain unchanged.
+                  </p>
+                </div>
+                <Switch
+                  checked={formData.allowDebt}
+                  onCheckedChange={(checked) => handleInputChange('allowDebt', checked)}
+                />
+              </div>
+
+              {!formData.allowDebt && (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    New bookings will require full payment before checkout. Partial payments and outstanding balances will be blocked.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Default Booking Times</CardTitle>
+              <CardDescription>
+                Set default check-in and check-out times. These will pre-fill booking forms but can be edited per booking.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="checkInTime">Default Check-in Time</Label>
+                  <Input
+                    id="checkInTime"
+                    type="time"
+                    value={formData.defaultCheckInTime}
+                    onChange={(e) => handleInputChange('defaultCheckInTime', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="checkOutTime">Default Check-out Time</Label>
+                  <Input
+                    id="checkOutTime"
+                    type="time"
+                    value={formData.defaultCheckOutTime}
+                    onChange={(e) => handleInputChange('defaultCheckOutTime', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <Button onClick={handleSave} className="w-full">
+                Save Booking Rules
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Receipt & Printing Tab */}
+        <TabsContent value="receipt" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Receipt Footer</CardTitle>
+              <CardDescription>
+                Customize the footer text that appears on payment receipts, booking invoices, and printed reports
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="receiptFooter">Footer Text</Label>
+                <Textarea
+                  id="receiptFooter"
+                  value={formData.receiptFooter}
+                  onChange={(e) => handleInputChange('receiptFooter', e.target.value)}
+                  placeholder="Enter footer text for receipts..."
+                  rows={4}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Supports multiple lines. Use line breaks for formatting.
+                </p>
+              </div>
+
+              {/* Preview */}
+              {formData.receiptFooter && (
+                <div className="border rounded-lg p-4 bg-muted/30">
+                  <p className="text-xs text-muted-foreground mb-2">Preview:</p>
+                  <div className="text-sm text-center whitespace-pre-line">
+                    {formData.receiptFooter}
+                  </div>
+                </div>
+              )}
+
+              <Button onClick={handleSave} className="w-full">
+                Save Receipt Settings
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* System Preferences Tab */}
+        <TabsContent value="system" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Delete Behavior</CardTitle>
+              <CardDescription>
+                Control how deletions are handled in the system
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <Label className="text-base">Soft Delete Mode</Label>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    When enabled, delete actions will be replaced with Cancel/Void. Records will be marked but not permanently removed.
+                  </p>
+                </div>
+                <Switch
+                  checked={formData.softDeleteMode}
+                  onCheckedChange={(checked) => handleInputChange('softDeleteMode', checked)}
+                />
+              </div>
+
+              {formData.softDeleteMode && (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Bookings and payments will be cancelled/voided instead of deleted. This helps maintain audit trails.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Appearance</CardTitle>
+              <CardDescription>
+                Customize the look and feel of the application
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <Label className="text-base">Dark Mode</Label>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Toggle between light and dark theme. Your preference will be saved locally.
+                  </p>
+                </div>
+                <Switch
+                  checked={formData.darkMode}
+                  onCheckedChange={(checked) => handleInputChange('darkMode', checked)}
+                />
+              </div>
+
+              <Button onClick={handleSave} className="w-full">
+                Save System Preferences
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Backup & Restore Tab */}
         <TabsContent value="backup" className="space-y-6">
           <Card>
             <CardHeader>

@@ -11,6 +11,7 @@ import { Booking, Guest, Room, getItem } from "@/lib/db";
 import { formatCurrency } from "@/lib/calculations";
 import { todayIso } from "@/lib/dates";
 import { CreditCard, DollarSign } from "lucide-react";
+import { getEnabledPaymentMethods, PaymentMethodConfig } from "@/lib/settings";
 
 interface PaymentFormProps {
   open: boolean;
@@ -20,7 +21,11 @@ interface PaymentFormProps {
 }
 
 export default function PaymentForm({ open, onOpenChange, booking, onPaymentAdded }: PaymentFormProps) {
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'pos'>('cash');
+  // Get enabled payment methods from settings
+  const enabledMethods = getEnabledPaymentMethods();
+  const defaultMethod = enabledMethods.length > 0 ? enabledMethods[0].id : 'cash';
+  
+  const [paymentMethod, setPaymentMethod] = useState(defaultMethod);
   const [paymentType, setPaymentType] = useState<'deposit' | 'full' | 'partial'>('full');
   const [amount, setAmount] = useState("");
   const [paymentDate, setPaymentDate] = useState(todayIso());
@@ -152,14 +157,16 @@ export default function PaymentForm({ open, onOpenChange, booking, onPaymentAdde
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="paymentMethod">Payment Method</Label>
-              <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as typeof paymentMethod)}>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="transfer">Bank Transfer</SelectItem>
-                  <SelectItem value="pos">POS / Card</SelectItem>
+                  {enabledMethods.map((method) => (
+                    <SelectItem key={method.id} value={method.id}>
+                      {method.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

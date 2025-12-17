@@ -10,6 +10,11 @@ export function generateReceipt(
   roomType: RoomType
 ): string {
   const settings = getSettings();
+  // Convert receipt footer line breaks to HTML
+  const footerHtml = settings.receiptFooter 
+    ? settings.receiptFooter.split('\n').map(line => `<p>${line}</p>`).join('')
+    : '';
+    
   return `
 <!DOCTYPE html>
 <html>
@@ -84,8 +89,20 @@ export function generateReceipt(
       margin-top: 40px;
       padding-top: 20px;
       border-top: 2px solid #eee;
-      color: #999;
+      color: #666;
       font-size: 14px;
+    }
+    .footer p {
+      margin: 5px 0;
+    }
+    .custom-footer {
+      margin-top: 20px;
+      padding-top: 15px;
+      border-top: 1px dashed #ccc;
+      white-space: pre-line;
+    }
+    .custom-footer p {
+      margin: 3px 0;
     }
     @media print {
       body {
@@ -202,6 +219,7 @@ export function generateReceipt(
   <div class="footer">
     <p>Thank you for choosing ${settings.hotelName}</p>
     <p>Generated on ${formatDateTime(new Date().toISOString())}</p>
+    ${footerHtml ? `<div class="custom-footer">${footerHtml}</div>` : ''}
   </div>
 
   <script>
