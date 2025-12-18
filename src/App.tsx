@@ -14,6 +14,7 @@ import Payments from "./pages/Payments";
 import Debt from "./pages/Debt";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
+import Extras from "./pages/Extras";
 import NotFound from "./pages/NotFound";
 import { initDB } from "./lib/db";
 import { initPaymentsStore } from "./lib/payments";
@@ -43,6 +44,7 @@ const App = () => {
               <Route path="/payments" element={<Payments />} />
               <Route path="/debt" element={<Debt />} />
               <Route path="/reports" element={<Reports />} />
+              <Route path="/extras" element={<Extras />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
