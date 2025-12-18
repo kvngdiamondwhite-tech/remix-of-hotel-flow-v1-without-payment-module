@@ -136,63 +136,127 @@ export async function initDB(): Promise<IDBDatabase> {
 }
 
 // Generic CRUD operations
-export async function addItem<T>(storeName: string, item: T): Promise<string> {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([storeName], 'readwrite');
-    const store = transaction.objectStore(storeName);
-    const request = store.add(item);
+async function withRetry<T>(operation: () => Promise<T>, retries = 2): Promise<T> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (i === retries) throw error;
+      // Reset connection and retry
+      dbInstance = null;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  throw new Error('Operation failed after retries');
+}
 
-    request.onsuccess = () => resolve(request.result as string);
-    request.onerror = () => reject(request.error);
+export async function addItem<T>(storeName: string, item: T): Promise<string> {
+  return withRetry(async () => {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([storeName], 'readwrite');
+      const store = transaction.objectStore(storeName);
+      const request = store.add(item);
+
+      transaction.onerror = () => {
+        dbInstance = null;
+        reject(transaction.error || new Error('Transaction failed'));
+      };
+      
+      transaction.onabort = () => {
+        dbInstance = null;
+        reject(new Error('Transaction aborted'));
+      };
+
+      request.onsuccess = () => resolve(request.result as string);
+      request.onerror = () => reject(request.error);
+    });
   });
 }
 
 export async function updateItem<T>(storeName: string, item: T): Promise<void> {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([storeName], 'readwrite');
-    const store = transaction.objectStore(storeName);
-    const request = store.put(item);
+  return withRetry(async () => {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([storeName], 'readwrite');
+      const store = transaction.objectStore(storeName);
+      const request = store.put(item);
 
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+      transaction.onerror = () => {
+        dbInstance = null;
+        reject(transaction.error || new Error('Transaction failed'));
+      };
+      
+      transaction.onabort = () => {
+        dbInstance = null;
+        reject(new Error('Transaction aborted'));
+      };
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
   });
 }
 
 export async function deleteItem(storeName: string, id: string): Promise<void> {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([storeName], 'readwrite');
-    const store = transaction.objectStore(storeName);
-    const request = store.delete(id);
+  return withRetry(async () => {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([storeName], 'readwrite');
+      const store = transaction.objectStore(storeName);
+      const request = store.delete(id);
 
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+      transaction.onerror = () => {
+        dbInstance = null;
+        reject(transaction.error || new Error('Transaction failed'));
+      };
+      
+      transaction.onabort = () => {
+        dbInstance = null;
+        reject(new Error('Transaction aborted'));
+      };
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
   });
 }
 
 export async function getItem<T>(storeName: string, id: string): Promise<T | undefined> {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([storeName], 'readonly');
-    const store = transaction.objectStore(storeName);
-    const request = store.get(id);
+  return withRetry(async () => {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([storeName], 'readonly');
+      const store = transaction.objectStore(storeName);
+      const request = store.get(id);
 
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+      transaction.onerror = () => {
+        dbInstance = null;
+        reject(transaction.error || new Error('Transaction failed'));
+      };
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
   });
 }
 
 export async function getAllItems<T>(storeName: string): Promise<T[]> {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([storeName], 'readonly');
-    const store = transaction.objectStore(storeName);
-    const request = store.getAll();
+  return withRetry(async () => {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([storeName], 'readonly');
+      const store = transaction.objectStore(storeName);
+      const request = store.getAll();
 
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+      transaction.onerror = () => {
+        dbInstance = null;
+        reject(transaction.error || new Error('Transaction failed'));
+      };
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
   });
 }
 
