@@ -8,12 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Download, Upload, Database, AlertCircle, Building2, Image, X, CreditCard, Clock, FileText, Settings2, Plus, Trash2, Edit2, Check } from "lucide-react";
-import { exportAllData, importData } from "@/lib/backup";
+import { exportAllData, importData, hasExistingData, clearAllData } from "@/lib/backup";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useSettings } from "@/hooks/useSettings";
 import { SUPPORTED_CURRENCIES, HotelSettings, PaymentMethodConfig, DEFAULT_PAYMENT_METHODS } from "@/lib/settings";
 import { uid } from "@/lib/id";
+import { ImportConfirmationModal, ImportMode } from "@/components/ImportConfirmationModal";
 
 export default function Settings() {
   const [importing, setImporting] = useState(false);
@@ -22,11 +23,17 @@ export default function Settings() {
   const [formData, setFormData] = useState<HotelSettings>(settings);
   const [logoPreview, setLogoPreview] = useState<string>(settings.logo);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
   
   // Payment method editing state
   const [editingMethodId, setEditingMethodId] = useState<string | null>(null);
   const [editingMethodName, setEditingMethodName] = useState("");
   const [newMethodName, setNewMethodName] = useState("");
+
+  // Import modal state (TASK 3)
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const [existingDataCheck, setExistingDataCheck] = useState(false);
 
   // Sync form data when settings load
   useEffect(() => {
@@ -59,13 +66,47 @@ export default function Settings() {
     }
   };
 
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle file selection - opens confirmation modal (TASK 3)
+  const handleImportFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    // Check if data exists before showing modal
+    const dataExists = await hasExistingData();
+    setExistingDataCheck(dataExists);
+    setPendingImportFile(file);
+    setShowImportModal(true);
+    
+    // Reset file input
+    e.target.value = '';
+  };
+
+  // Handle import confirmation (TASK 3)
+  const handleImportConfirm = async (mode: ImportMode) => {
+    if (!pendingImportFile) return;
+
+    // If empty-only mode and data exists, block import
+    if (mode === 'empty-only' && existingDataCheck) {
+      toast({
+        title: "Import Blocked",
+        description: "Existing data detected. Please clear data first or choose 'Clear existing data before import'.",
+        variant: "destructive",
+      });
+      setShowImportModal(false);
+      setPendingImportFile(null);
+      return;
+    }
 
     setImporting(true);
+    setShowImportModal(false);
+
     try {
-      const result = await importData(file);
+      // Clear data if requested
+      if (mode === 'clear-first') {
+        await clearAllData();
+      }
+
+      const result = await importData(pendingImportFile);
       if (result.success) {
         toast({
           title: "Success",
@@ -87,8 +128,13 @@ export default function Settings() {
       });
     } finally {
       setImporting(false);
-      e.target.value = '';
+      setPendingImportFile(null);
     }
+  };
+
+  const handleImportCancel = () => {
+    setShowImportModal(false);
+    setPendingImportFile(null);
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -663,7 +709,7 @@ export default function Settings() {
                   <input
                     type="file"
                     accept=".json"
-                    onChange={handleImport}
+                    onChange={handleImportFileSelect}
                     disabled={importing}
                     id="import-file"
                     className="hidden"
@@ -679,13 +725,6 @@ export default function Settings() {
                   </Button>
                 </div>
               </div>
-
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Warning: Importing data will add to existing data. Duplicate IDs may cause issues.
-                </AlertDescription>
-              </Alert>
             </CardContent>
           </Card>
 
@@ -707,6 +746,14 @@ export default function Settings() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Import Confirmation Modal (TASK 3) */}
+      <ImportConfirmationModal
+        open={showImportModal}
+        onClose={handleImportCancel}
+        onConfirm={handleImportConfirm}
+        hasExistingData={existingDataCheck}
+      />
     </div>
   );
 }
