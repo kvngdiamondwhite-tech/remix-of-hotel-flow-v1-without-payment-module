@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { printReceipt } from "@/lib/receipt";
 import { getTotalPaidForBooking } from "@/lib/payments";
 import PaymentForm from "@/components/PaymentForm";
+import { naturalSort } from "@/lib/naturalSort";
 
 export default function Bookings() {
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -308,13 +309,14 @@ export default function Bookings() {
                       <SelectValue placeholder="Select a room" />
                     </SelectTrigger>
                     <SelectContent>
-                      {rooms
-                        .filter(r => r.status === 'Available' || r.id === editingBooking?.roomId)
-                        .map((room) => {
+                      {naturalSort(
+                        rooms.filter(r => r.status === 'Available' || r.id === editingBooking?.roomId),
+                        r => r.roomNumber
+                      ).map((room) => {
                           const roomType = roomTypes.find(rt => rt.id === room.roomTypeId);
                           return (
                             <SelectItem key={room.id} value={room.id}>
-                              Room {room.roomNumber} - {roomType?.name} ({formatCurrency(roomType?.basePrice || 0)}/night)
+                              {room.roomNumber} - {roomType?.name} ({formatCurrency(roomType?.basePrice || 0)}/night)
                             </SelectItem>
                           );
                         })}

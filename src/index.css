@@ -111,3 +111,75 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Print styles for reports */
+@media print {
+  /* Hide navigation and non-report UI */
+  nav,
+  aside,
+  .print\\:hidden,
+  [data-sidebar="sidebar"] {
+    display: none !important;
+  }
+
+  /* Remove sidebar margin */
+  main,
+  .print-content {
+    margin-left: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Center report content */
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Prevent page breaks inside cards */
+  .print\\:break-inside-avoid {
+    break-inside: avoid;
+  }
+
+  /* Fixed grid layout for totals - prevent stacking */
+  .print\\:grid-cols-5 {
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Compact text for print */
+  .print\\:text-xs {
+    font-size: 0.65rem !important;
+  }
+
+  .print\\:text-base {
+    font-size: 0.85rem !important;
+  }
+
+  /* Prevent overflow in totals boxes */
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+
+  /* Table styling for print */
+  table {
+    font-size: 0.75rem !important;
+  }
+
+  th, td {
+    padding: 0.25rem 0.5rem !important;
+  }
+
+  /* Remove shadows and borders in print */
+  .print\\:shadow-none {
+    box-shadow: none !important;
+  }
+
+  .print\\:border-none {
+    border: none !important;
+  }
+}
