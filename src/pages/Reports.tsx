@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { getAllItems, Booking, Guest, Room, RoomType } from "@/lib/db";
 import { getAllPayments, Payment } from "@/lib/payments";
 import { formatCurrency } from "@/lib/calculations";
@@ -61,10 +62,40 @@ export default function Reports() {
   // Helper functions
   const getGuestName = (guestId: string) => data.guests.find((g) => g.id === guestId)?.fullName || "Unknown";
   const getRoomNumber = (roomId: string) => data.rooms.find((r) => r.id === roomId)?.roomNumber || "Unknown";
+  const getRoomTypeName = (roomTypeId: string) => data.roomTypes.find((rt) => rt.id === roomTypeId)?.name || "Unknown";
   const getTotalPaidForBooking = (bookingId: string) =>
     data.payments.filter((p) => p.bookingId === bookingId).reduce((sum, p) => sum + p.amount, 0);
 
-  // Daily Lodge History Report
+  // Get payment status label
+  const getPaymentStatus = (total: number, paid: number): "Full" | "Partial" | "Unpaid" => {
+    if (paid >= total) return "Full";
+    if (paid > 0) return "Partial";
+    return "Unpaid";
+  };
+
+  // Get primary payment method for a booking's payments on a specific date
+  const getPaymentMethodForDate = (bookingId: string, dateStart: Date, dateEnd: Date): string => {
+    const payments = data.payments.filter((p) => 
+      p.bookingId === bookingId && 
+      isWithinInterval(parseISO(p.paymentDate), { start: dateStart, end: dateEnd })
+    );
+    if (payments.length === 0) return "-";
+    // Return comma-separated unique methods
+    const methods = [...new Set(payments.map(p => p.paymentMethod))];
+    return methods.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(", ");
+  };
+
+  // Get amount paid for a booking on a specific date
+  const getAmountPaidForDate = (bookingId: string, dateStart: Date, dateEnd: Date): number => {
+    return data.payments
+      .filter((p) => 
+        p.bookingId === bookingId && 
+        isWithinInterval(parseISO(p.paymentDate), { start: dateStart, end: dateEnd })
+      )
+      .reduce((sum, p) => sum + p.amount, 0);
+  };
+
+  // Daily Lodge History Report - now shows ALL bookings active on this date
   function getDailyLodgeHistory() {
     const dateStart = startOfDay(parseISO(selectedDate));
     const dateEnd = endOfDay(parseISO(selectedDate));
@@ -77,18 +108,38 @@ export default function Reports() {
     const cashTotal = dailyPayments.filter((p) => p.paymentMethod === "cash").reduce((sum, p) => sum + p.amount, 0);
     const transferTotal = dailyPayments.filter((p) => p.paymentMethod === "transfer").reduce((sum, p) => sum + p.amount, 0);
 
-    // Get bookings active on this date
+    // Get ALL bookings active on this date (checked in on or before, checked out on or after)
     const activeBookings = data.bookings.filter((b) => {
       const checkIn = parseISO(b.checkInDate);
       const checkOut = parseISO(b.checkOutDate);
       return dateStart <= checkOut && dateEnd >= checkIn;
     });
 
+    // Enrich bookings with payment info
+    const enrichedBookings = activeBookings.map((booking) => {
+      const room = data.rooms.find(r => r.id === booking.roomId);
+      const totalPaid = getTotalPaidForBooking(booking.id);
+      const amountPaidToday = getAmountPaidForDate(booking.id, dateStart, dateEnd);
+      const paymentMethodToday = getPaymentMethodForDate(booking.id, dateStart, dateEnd);
+      const paymentStatus = getPaymentStatus(booking.total, totalPaid);
+      const balance = Math.max(0, booking.total - totalPaid);
+
+      return {
+        booking,
+        guestName: getGuestName(booking.guestId),
+        roomNumber: getRoomNumber(booking.roomId),
+        roomTypeName: room ? getRoomTypeName(room.roomTypeId) : "Unknown",
+        total: booking.total,
+        totalPaid,
+        amountPaidToday,
+        paymentMethodToday,
+        paymentStatus,
+        balance,
+      };
+    });
+
     // Calculate daily outstanding (debt for active bookings)
-    const dailyDebt = activeBookings.reduce((sum, b) => {
-      const paid = getTotalPaidForBooking(b.id);
-      return sum + Math.max(0, b.total - paid);
-    }, 0);
+    const dailyDebt = enrichedBookings.reduce((sum, b) => sum + b.balance, 0);
 
     const grandTotal = posTotal + cashTotal + transferTotal + dailyDebt;
 
@@ -100,6 +151,7 @@ export default function Reports() {
       dailyDebt,
       grandTotal,
       activeBookings,
+      enrichedBookings,
     };
   }
 
@@ -285,69 +337,84 @@ export default function Reports() {
               </p>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Summary Blocks */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <Card className="bg-primary/10">
+              {/* Summary Blocks - Fixed grid for print */}
+              <div className="grid grid-cols-5 gap-4 print:grid-cols-5 print:gap-2">
+                <Card className="bg-primary/10 print:break-inside-avoid">
                   <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">POS</p>
-                    <p className="text-xl font-bold text-primary">{formatCurrency(lodgeHistory.posTotal)}</p>
+                    <p className="text-sm text-muted-foreground print:text-xs">POS</p>
+                    <p className="text-xl font-bold text-primary print:text-base truncate">{formatCurrency(lodgeHistory.posTotal)}</p>
                   </CardContent>
                 </Card>
-                <Card className="bg-success/10">
+                <Card className="bg-success/10 print:break-inside-avoid">
                   <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Cash</p>
-                    <p className="text-xl font-bold text-success">{formatCurrency(lodgeHistory.cashTotal)}</p>
+                    <p className="text-sm text-muted-foreground print:text-xs">Cash</p>
+                    <p className="text-xl font-bold text-success print:text-base truncate">{formatCurrency(lodgeHistory.cashTotal)}</p>
                   </CardContent>
                 </Card>
-                <Card className="bg-warning/10">
+                <Card className="bg-warning/10 print:break-inside-avoid">
                   <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Transfer</p>
-                    <p className="text-xl font-bold text-warning">{formatCurrency(lodgeHistory.transferTotal)}</p>
+                    <p className="text-sm text-muted-foreground print:text-xs">Transfer</p>
+                    <p className="text-xl font-bold text-warning print:text-base truncate">{formatCurrency(lodgeHistory.transferTotal)}</p>
                   </CardContent>
                 </Card>
-                <Card className="bg-destructive/10">
+                <Card className="bg-destructive/10 print:break-inside-avoid">
                   <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Outstanding</p>
-                    <p className="text-xl font-bold text-destructive">{formatCurrency(lodgeHistory.dailyDebt)}</p>
+                    <p className="text-sm text-muted-foreground print:text-xs">Outstanding</p>
+                    <p className="text-xl font-bold text-destructive print:text-base truncate">{formatCurrency(lodgeHistory.dailyDebt)}</p>
                   </CardContent>
                 </Card>
-                <Card className="bg-secondary">
+                <Card className="bg-secondary print:break-inside-avoid">
                   <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Grand Total</p>
-                    <p className="text-xl font-bold text-foreground">{formatCurrency(lodgeHistory.grandTotal)}</p>
+                    <p className="text-sm text-muted-foreground print:text-xs">Grand Total</p>
+                    <p className="text-xl font-bold text-foreground print:text-base truncate">{formatCurrency(lodgeHistory.grandTotal)}</p>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Payments Table */}
+              {/* Lodges/Bookings Table - Shows ALL bookings */}
               <div>
-                <h3 className="font-semibold mb-3">Payment Transactions</h3>
-                {lodgeHistory.dailyPayments.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">No payments recorded for this date.</p>
+                <h3 className="font-semibold mb-3">Lodges ({lodgeHistory.enrichedBookings.length})</h3>
+                {lodgeHistory.enrichedBookings.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">No lodges/bookings for this date.</p>
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Guest</TableHead>
                         <TableHead>Room</TableHead>
-                        <TableHead>Method</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead>Room Type</TableHead>
+                        <TableHead>Payment Method</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Amount Paid (Today)</TableHead>
+                        <TableHead className="text-right">Balance</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {lodgeHistory.dailyPayments.map((payment) => {
-                        const booking = data.bookings.find((b) => b.id === payment.bookingId);
-                        return (
-                          <TableRow key={payment.id}>
-                            <TableCell>{booking ? getGuestName(booking.guestId) : "Unknown"}</TableCell>
-                            <TableCell>{booking ? getRoomNumber(booking.roomId) : "Unknown"}</TableCell>
-                            <TableCell className="capitalize">{payment.paymentMethod}</TableCell>
-                            <TableCell className="capitalize">{payment.paymentType}</TableCell>
-                            <TableCell className="text-right font-medium">{formatCurrency(payment.amount)}</TableCell>
-                          </TableRow>
-                        );
-                      })}
+                      {lodgeHistory.enrichedBookings.map((item) => (
+                        <TableRow key={item.booking.id}>
+                          <TableCell className="font-medium">{item.guestName}</TableCell>
+                          <TableCell>{item.roomNumber}</TableCell>
+                          <TableCell>{item.roomTypeName}</TableCell>
+                          <TableCell className="capitalize">{item.paymentMethodToday}</TableCell>
+                          <TableCell>
+                            <Badge 
+                              className={
+                                item.paymentStatus === "Full" 
+                                  ? "bg-success text-success-foreground" 
+                                  : item.paymentStatus === "Partial" 
+                                    ? "bg-warning text-warning-foreground"
+                                    : "bg-destructive text-destructive-foreground"
+                              }
+                            >
+                              {item.paymentStatus}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">{formatCurrency(item.amountPaidToday)}</TableCell>
+                          <TableCell className="text-right font-medium text-destructive">
+                            {item.balance > 0 ? formatCurrency(item.balance) : "-"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
                     </TableBody>
                   </Table>
                 )}
@@ -579,7 +646,7 @@ export default function Reports() {
                     {outstandingDebt.map((item) => (
                       <TableRow key={item.booking.id}>
                         <TableCell className="font-medium">{item.guestName}</TableCell>
-                        <TableCell>Room {item.roomNumber}</TableCell>
+                        <TableCell>{item.roomNumber}</TableCell>
                         <TableCell>{formatDate(item.booking.checkInDate)}</TableCell>
                         <TableCell className="text-right">{formatCurrency(item.total)}</TableCell>
                         <TableCell className="text-right text-success">{formatCurrency(item.paid)}</TableCell>

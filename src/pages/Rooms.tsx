@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,19 +9,43 @@ import { Badge } from "@/components/ui/badge";
 import { getAllItems, addItem, updateItem, deleteItem, Room, RoomType } from "@/lib/db";
 import { uid } from "@/lib/id";
 import { nowIso } from "@/lib/dates";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, Search } from "lucide-react";
 import { toast } from "sonner";
+import { naturalSort } from "@/lib/naturalSort";
 
 export default function Rooms() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterRoomTypeId, setFilterRoomTypeId] = useState<string>("all");
   const [formData, setFormData] = useState({
     roomNumber: "",
     roomTypeId: "",
     status: "Available" as Room['status'],
   });
+
+  // Filtered and sorted rooms
+  const filteredRooms = useMemo(() => {
+    let result = rooms;
+    
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(room => 
+        room.roomNumber.toLowerCase().includes(query)
+      );
+    }
+    
+    // Filter by room type
+    if (filterRoomTypeId && filterRoomTypeId !== "all") {
+      result = result.filter(room => room.roomTypeId === filterRoomTypeId);
+    }
+    
+    // Natural sort
+    return naturalSort(result, r => r.roomNumber);
+  }, [rooms, searchQuery, filterRoomTypeId]);
 
   useEffect(() => {
     loadData();
@@ -32,7 +56,7 @@ export default function Rooms() {
       getAllItems<Room>('rooms'),
       getAllItems<RoomType>('roomTypes')
     ]);
-    setRooms(roomsData.sort((a, b) => a.roomNumber.localeCompare(b.roomNumber)));
+    setRooms(roomsData);
     setRoomTypes(typesData);
   }
 
@@ -231,6 +255,34 @@ export default function Rooms() {
         </Dialog>
       </div>
 
+      {/* Search and Filter */}
+      {roomTypes.length > 0 && rooms.length > 0 && (
+        <div className="flex flex-col sm:flex-row gap-4 mb-6">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search rooms..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <Select value={filterRoomTypeId} onValueChange={setFilterRoomTypeId}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Filter by type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              {roomTypes.map((type) => (
+                <SelectItem key={type.id} value={type.id}>
+                  {type.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {roomTypes.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
@@ -250,15 +302,24 @@ export default function Rooms() {
             </Button>
           </CardContent>
         </Card>
+      ) : filteredRooms.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <p className="text-muted-foreground mb-4">No rooms match your search</p>
+            <Button variant="outline" onClick={() => { setSearchQuery(""); setFilterRoomTypeId("all"); }}>
+              Clear Filters
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {rooms.map((room) => (
+          {filteredRooms.map((room) => (
             <Card key={room.id} className="hover:shadow-lg transition-shadow">
               <CardContent className="pt-6">
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <h3 className="text-2xl font-bold text-foreground">
-                      Room {room.roomNumber}
+                      {room.roomNumber}
                     </h3>
                     <p className="text-sm text-muted-foreground mt-1">
                       {getRoomTypeName(room.roomTypeId)}
