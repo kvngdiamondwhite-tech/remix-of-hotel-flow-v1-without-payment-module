@@ -1,7 +1,7 @@
 // IndexedDB setup and operations
 
 const DB_NAME = 'HotelManagementDB';
-const DB_VERSION = 150;
+const DB_VERSION = 151;
 
 export interface RoomType {
   id: string;
