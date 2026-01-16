@@ -21,8 +21,8 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div className="flex h-screen bg-background">
-      {/* Sidebar */}
-      <aside className="w-64 bg-sidebar border-r border-sidebar-border">
+      {/* Sidebar - hidden in print */}
+      <aside className="w-64 bg-sidebar border-r border-sidebar-border print:hidden">
         <div className="p-6 border-b border-sidebar-border">
           <div className="flex items-center gap-3">
             <Bed className="h-8 w-8 text-sidebar-ring" />
@@ -57,7 +57,7 @@ export default function Layout({ children }: LayoutProps) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto print:m-0 print:w-full">
         {children}
       </main>
     </div>

@@ -337,38 +337,28 @@ export default function Reports() {
               </p>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Summary Blocks - Fixed grid for print */}
-              <div className="grid grid-cols-5 gap-4 print:grid-cols-5 print:gap-2">
-                <Card className="bg-primary/10 print:break-inside-avoid">
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground print:text-xs">POS</p>
-                    <p className="text-xl font-bold text-primary print:text-base truncate">{formatCurrency(lodgeHistory.posTotal)}</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-success/10 print:break-inside-avoid">
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground print:text-xs">Cash</p>
-                    <p className="text-xl font-bold text-success print:text-base truncate">{formatCurrency(lodgeHistory.cashTotal)}</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-warning/10 print:break-inside-avoid">
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground print:text-xs">Transfer</p>
-                    <p className="text-xl font-bold text-warning print:text-base truncate">{formatCurrency(lodgeHistory.transferTotal)}</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-destructive/10 print:break-inside-avoid">
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground print:text-xs">Outstanding</p>
-                    <p className="text-xl font-bold text-destructive print:text-base truncate">{formatCurrency(lodgeHistory.dailyDebt)}</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-secondary print:break-inside-avoid">
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground print:text-xs">Grand Total</p>
-                    <p className="text-xl font-bold text-foreground print:text-base truncate">{formatCurrency(lodgeHistory.grandTotal)}</p>
-                  </CardContent>
-                </Card>
+              {/* Summary Totals - Inline Row Format */}
+              <div className="report-totals-container">
+                <div className="report-total-row pos">
+                  <span className="report-total-label">POS</span>
+                  <span className="report-total-amount">{formatCurrency(lodgeHistory.posTotal)}</span>
+                </div>
+                <div className="report-total-row cash">
+                  <span className="report-total-label">Cash</span>
+                  <span className="report-total-amount">{formatCurrency(lodgeHistory.cashTotal)}</span>
+                </div>
+                <div className="report-total-row transfer">
+                  <span className="report-total-label">Transfer</span>
+                  <span className="report-total-amount">{formatCurrency(lodgeHistory.transferTotal)}</span>
+                </div>
+                <div className="report-total-row outstanding">
+                  <span className="report-total-label">Outstanding Debt</span>
+                  <span className="report-total-amount">{formatCurrency(lodgeHistory.dailyDebt)}</span>
+                </div>
+                <div className="report-total-row grand-total">
+                  <span className="report-total-label">Grand Total</span>
+                  <span className="report-total-amount">{formatCurrency(lodgeHistory.grandTotal)}</span>
+                </div>
               </div>
 
               {/* Lodges/Bookings Table - Shows ALL bookings */}
@@ -444,31 +434,24 @@ export default function Reports() {
               </p>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card className="bg-primary/10">
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Total Revenue</p>
-                    <p className="text-2xl font-bold text-primary">{formatCurrency(dailyRevenue.total)}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">POS</p>
-                    <p className="text-xl font-bold">{formatCurrency(dailyRevenue.pos)}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Cash</p>
-                    <p className="text-xl font-bold">{formatCurrency(dailyRevenue.cash)}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Transfer</p>
-                    <p className="text-xl font-bold">{formatCurrency(dailyRevenue.transfer)}</p>
-                  </CardContent>
-                </Card>
+              {/* Revenue Totals - Inline Row Format */}
+              <div className="report-totals-container">
+                <div className="report-total-row pos">
+                  <span className="report-total-label">POS</span>
+                  <span className="report-total-amount">{formatCurrency(dailyRevenue.pos)}</span>
+                </div>
+                <div className="report-total-row cash">
+                  <span className="report-total-label">Cash</span>
+                  <span className="report-total-amount">{formatCurrency(dailyRevenue.cash)}</span>
+                </div>
+                <div className="report-total-row transfer">
+                  <span className="report-total-label">Transfer</span>
+                  <span className="report-total-amount">{formatCurrency(dailyRevenue.transfer)}</span>
+                </div>
+                <div className="report-total-row grand-total">
+                  <span className="report-total-label">Total Revenue</span>
+                  <span className="report-total-amount">{formatCurrency(dailyRevenue.total)}</span>
+                </div>
               </div>
 
               <div>
@@ -526,25 +509,32 @@ export default function Reports() {
               </p>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-                <Card className="bg-primary/10">
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Total Revenue</p>
-                    <p className="text-2xl font-bold text-primary">{formatCurrency(monthlyRevenue.totalRevenue)}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Bookings</p>
-                    <p className="text-2xl font-bold">{monthlyRevenue.bookingsCount}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Payments</p>
-                    <p className="text-2xl font-bold">{monthlyRevenue.paymentsCount}</p>
-                  </CardContent>
-                </Card>
+              {/* Monthly Summary Totals - Inline Row Format */}
+              <div className="report-totals-container mb-6">
+                <div className="report-total-row pos">
+                  <span className="report-total-label">POS</span>
+                  <span className="report-total-amount">{formatCurrency(monthlyRevenue.pos)}</span>
+                </div>
+                <div className="report-total-row cash">
+                  <span className="report-total-label">Cash</span>
+                  <span className="report-total-amount">{formatCurrency(monthlyRevenue.cash)}</span>
+                </div>
+                <div className="report-total-row transfer">
+                  <span className="report-total-label">Transfer</span>
+                  <span className="report-total-amount">{formatCurrency(monthlyRevenue.transfer)}</span>
+                </div>
+                <div className="report-total-row grand-total">
+                  <span className="report-total-label">Total Revenue</span>
+                  <span className="report-total-amount">{formatCurrency(monthlyRevenue.totalRevenue)}</span>
+                </div>
+                <div className="report-total-row" style={{ borderColor: 'hsl(var(--border))' }}>
+                  <span className="report-total-label">Bookings Count</span>
+                  <span className="report-total-amount" style={{ color: 'hsl(var(--foreground))' }}>{monthlyRevenue.bookingsCount}</span>
+                </div>
+                <div className="report-total-row" style={{ borderColor: 'hsl(var(--border))' }}>
+                  <span className="report-total-label">Payments Count</span>
+                  <span className="report-total-amount" style={{ color: 'hsl(var(--foreground))' }}>{monthlyRevenue.paymentsCount}</span>
+                </div>
               </div>
 
               <h3 className="font-semibold mb-3">Breakdown by Payment Method</h3>
@@ -611,21 +601,16 @@ export default function Reports() {
               </p>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <Card className="bg-destructive/10">
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Total Outstanding</p>
-                    <p className="text-2xl font-bold text-destructive">
-                      {formatCurrency(outstandingDebt.reduce((sum, item) => sum + item.balance, 0))}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Unpaid Bookings</p>
-                    <p className="text-2xl font-bold">{outstandingDebt.length}</p>
-                  </CardContent>
-                </Card>
+              {/* Outstanding Debt Summary - Inline Row Format */}
+              <div className="report-totals-container mb-6">
+                <div className="report-total-row outstanding">
+                  <span className="report-total-label">Total Outstanding</span>
+                  <span className="report-total-amount">{formatCurrency(outstandingDebt.reduce((sum, item) => sum + item.balance, 0))}</span>
+                </div>
+                <div className="report-total-row" style={{ borderColor: 'hsl(var(--border))' }}>
+                  <span className="report-total-label">Unpaid Bookings</span>
+                  <span className="report-total-amount" style={{ color: 'hsl(var(--foreground))' }}>{outstandingDebt.length}</span>
+                </div>
               </div>
 
               {outstandingDebt.length === 0 ? (
@@ -695,31 +680,24 @@ export default function Reports() {
               </p>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card>
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Total Rooms</p>
-                    <p className="text-2xl font-bold">{occupancy.totalRooms}</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-destructive/10">
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Occupied</p>
-                    <p className="text-2xl font-bold text-destructive">{occupancy.occupiedCount}</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-success/10">
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Available</p>
-                    <p className="text-2xl font-bold text-success">{occupancy.availableCount}</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-primary/10">
-                  <CardContent className="pt-4 text-center">
-                    <p className="text-sm text-muted-foreground">Occupancy Rate</p>
-                    <p className="text-2xl font-bold text-primary">{occupancy.occupancyRate}%</p>
-                  </CardContent>
-                </Card>
+              {/* Occupancy Summary - Inline Row Format */}
+              <div className="report-totals-container">
+                <div className="report-total-row" style={{ borderColor: 'hsl(var(--border))' }}>
+                  <span className="report-total-label">Total Rooms</span>
+                  <span className="report-total-amount" style={{ color: 'hsl(var(--foreground))' }}>{occupancy.totalRooms}</span>
+                </div>
+                <div className="report-total-row outstanding">
+                  <span className="report-total-label">Occupied</span>
+                  <span className="report-total-amount">{occupancy.occupiedCount}</span>
+                </div>
+                <div className="report-total-row cash">
+                  <span className="report-total-label">Available</span>
+                  <span className="report-total-amount">{occupancy.availableCount}</span>
+                </div>
+                <div className="report-total-row grand-total">
+                  <span className="report-total-label">Occupancy Rate</span>
+                  <span className="report-total-amount">{occupancy.occupancyRate}%</span>
+                </div>
               </div>
             </CardContent>
           </Card>
