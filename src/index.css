@@ -112,74 +112,208 @@ All colors MUST be HSL.
   }
 }
 
+/* Report totals inline row styles */
+.report-totals-container {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.report-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  margin-bottom: 0.5rem;
+  min-height: 2.5rem;
+}
+
+.report-total-row.pos {
+  border-color: hsl(var(--primary));
+  background-color: hsl(var(--primary) / 0.05);
+}
+
+.report-total-row.cash {
+  border-color: hsl(var(--success));
+  background-color: hsl(var(--success) / 0.05);
+}
+
+.report-total-row.transfer {
+  border-color: hsl(var(--warning));
+  background-color: hsl(var(--warning) / 0.05);
+}
+
+.report-total-row.outstanding {
+  border-color: hsl(var(--destructive));
+  background-color: hsl(var(--destructive) / 0.05);
+}
+
+.report-total-row.grand-total {
+  border-width: 2px;
+  border-color: hsl(var(--foreground));
+  background-color: hsl(var(--secondary));
+  font-weight: 600;
+}
+
+.report-total-label {
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.report-total-row.grand-total .report-total-label {
+  color: hsl(var(--foreground));
+}
+
+.report-total-amount {
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: right;
+  word-break: break-word;
+}
+
+.report-total-row.pos .report-total-amount {
+  color: hsl(var(--primary));
+}
+
+.report-total-row.cash .report-total-amount {
+  color: hsl(var(--success));
+}
+
+.report-total-row.transfer .report-total-amount {
+  color: hsl(var(--warning));
+}
+
+.report-total-row.outstanding .report-total-amount {
+  color: hsl(var(--destructive));
+}
+
+.report-total-row.grand-total .report-total-amount {
+  color: hsl(var(--foreground));
+}
+
 /* Print styles for reports */
 @media print {
-  /* Hide navigation and non-report UI */
-  nav,
+  /* Force A4 portrait optimization */
+  @page {
+    size: A4 portrait;
+    margin: 1cm;
+  }
+
+  /* Completely hide sidebar and navigation */
   aside,
+  nav,
   .print\\:hidden,
-  [data-sidebar="sidebar"] {
+  [data-sidebar="sidebar"],
+  .sidebar,
+  header:not(.print-header) {
     display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    position: absolute !important;
+    left: -9999px !important;
   }
 
-  /* Remove sidebar margin */
-  main,
-  .print-content {
-    margin-left: 0 !important;
-    padding: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  /* Center report content */
+  /* Reset the main layout to full width */
   body {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    background: white !important;
+  }
+
+  /* Override flex layout for print */
+  .flex.h-screen {
+    display: block !important;
+  }
+
+  /* Main content takes full width */
+  main,
+  .print-content,
+  main.flex-1 {
+    margin-left: 0 !important;
+    padding: 0.5cm !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+  }
+
+  /* Report container */
+  .p-8 {
+    padding: 0 !important;
+  }
+
+  /* Report totals print styles - no stacking */
+  .report-totals-container {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .report-total-row {
+    display: flex !important;
+    flex-direction: row !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    padding: 0.3rem 0.75rem !important;
+    margin-bottom: 0.25rem !important;
+  }
+
+  .report-total-label {
+    font-size: 0.75rem !important;
+  }
+
+  .report-total-amount {
+    font-size: 0.875rem !important;
   }
 
   /* Prevent page breaks inside cards */
   .print\\:break-inside-avoid {
     break-inside: avoid;
-  }
-
-  /* Fixed grid layout for totals - prevent stacking */
-  .print\\:grid-cols-5 {
-    grid-template-columns: repeat(5, 1fr) !important;
-    gap: 0.5rem !important;
-  }
-
-  /* Compact text for print */
-  .print\\:text-xs {
-    font-size: 0.65rem !important;
-  }
-
-  .print\\:text-base {
-    font-size: 0.85rem !important;
-  }
-
-  /* Prevent overflow in totals boxes */
-  .truncate {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 100%;
+    page-break-inside: avoid;
   }
 
   /* Table styling for print */
   table {
-    font-size: 0.75rem !important;
+    font-size: 0.7rem !important;
+    width: 100% !important;
+    table-layout: auto !important;
   }
 
   th, td {
-    padding: 0.25rem 0.5rem !important;
+    padding: 0.2rem 0.4rem !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
   }
 
-  /* Remove shadows and borders in print */
-  .print\\:shadow-none {
+  /* Allow text wrapping, prevent clipping */
+  .truncate {
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+  }
+
+  /* Remove shadows in print */
+  .print\\:shadow-none,
+  .shadow,
+  [class*="shadow"] {
     box-shadow: none !important;
   }
 
+  /* Tabs content visibility for print */
+  [role="tabpanel"][data-state="active"] {
+    display: block !important;
+  }
+
+  /* Card print styling */
   .print\\:border-none {
     border: none !important;
+  }
+
+  /* Ensure no horizontal overflow */
+  * {
+    max-width: 100% !important;
+    overflow-x: visible !important;
   }
 }
