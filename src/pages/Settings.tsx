@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Download, Upload, Database, AlertCircle, Building2, Image, X, CreditCard, Clock, FileText, Settings2, Plus, Trash2, Edit2, Check } from "lucide-react";
+import { Download, Upload, Database, AlertCircle, Building2, Image, X, CreditCard, Clock, FileText, Settings2, Plus, Trash2, Edit2, Check, Key, Shield, Copy } from "lucide-react";
 import { exportAllData, importData, hasExistingData, clearAllData } from "@/lib/backup";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
@@ -15,11 +15,17 @@ import { useSettings } from "@/hooks/useSettings";
 import { SUPPORTED_CURRENCIES, HotelSettings, PaymentMethodConfig, DEFAULT_PAYMENT_METHODS } from "@/lib/settings";
 import { uid } from "@/lib/id";
 import { ImportConfirmationModal, ImportMode } from "@/components/ImportConfirmationModal";
+import { useLicense } from "@/hooks/useLicense";
+import { formatDate } from "@/lib/dates";
+import { Badge } from "@/components/ui/badge";
+import { TRIAL_LIMITS } from "@/lib/license";
 
 export default function Settings() {
   const [importing, setImporting] = useState(false);
   const { toast } = useToast();
   const { settings, updateSettings } = useSettings();
+  const license = useLicense();
+  const [licenseKey, setLicenseKey] = useState("");
   const [formData, setFormData] = useState<HotelSettings>(settings);
   const [logoPreview, setLogoPreview] = useState<string>(settings.logo);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -262,8 +268,12 @@ export default function Settings() {
         <p className="text-muted-foreground mt-1">Manage your data and application settings</p>
       </div>
 
-      <Tabs defaultValue="profile" className="max-w-3xl">
+      <Tabs defaultValue="license" className="max-w-3xl">
         <TabsList className="mb-6 flex-wrap h-auto gap-1">
+          <TabsTrigger value="license">
+            <Key className="h-4 w-4 mr-2" />
+            License
+          </TabsTrigger>
           <TabsTrigger value="profile">
             <Building2 className="h-4 w-4 mr-2" />
             Business Profile
@@ -289,6 +299,180 @@ export default function Settings() {
             Backup & Restore
           </TabsTrigger>
         </TabsList>
+
+        {/* License / Activation Tab */}
+        <TabsContent value="license" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-primary" />
+                  <CardTitle>License & Activation</CardTitle>
+                </div>
+                <Badge 
+                  className={
+                    license.isActive ? "bg-green-500/20 text-green-700 dark:text-green-400" :
+                    license.isTrial ? "bg-amber-500/20 text-amber-700 dark:text-amber-400" :
+                    "bg-red-500/20 text-red-700 dark:text-red-400"
+                  }
+                >
+                  {license.stateLabel}
+                </Badge>
+              </div>
+              <CardDescription>
+                Manage your software license and view activation status
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* App Info */}
+              <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+                <div>
+                  <p className="text-sm text-muted-foreground">App Version</p>
+                  <p className="font-semibold">1.0.0</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">License Status</p>
+                  <p className="font-semibold">{license.stateLabel}</p>
+                </div>
+              </div>
+
+              {/* Machine ID */}
+              <div className="space-y-2">
+                <Label>Machine ID</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    value={license.machineId} 
+                    readOnly 
+                    className="font-mono bg-muted"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => {
+                      navigator.clipboard.writeText(license.machineId);
+                      toast({ title: "Copied", description: "Machine ID copied to clipboard" });
+                    }}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Provide this ID when requesting a license key
+                </p>
+              </div>
+
+              {/* License Status Details */}
+              {license.isActive && (
+                <div className="p-4 border border-green-500/30 bg-green-500/5 rounded-lg space-y-2">
+                  <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                    <Shield className="h-5 w-5" />
+                    <span className="font-semibold">License Active</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Activated On</p>
+                      <p className="font-medium">{license.activationDate ? formatDate(license.activationDate) : 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Expires On</p>
+                      <p className="font-medium">{license.expiryDate ? formatDate(license.expiryDate) : 'N/A'}</p>
+                    </div>
+                  </div>
+                  {license.daysRemaining !== null && license.daysRemaining <= 30 && (
+                    <Alert className="mt-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        Your license expires in {license.daysRemaining} days. Contact support for renewal.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+
+              {license.isTrial && (
+                <div className="p-4 border border-amber-500/30 bg-amber-500/5 rounded-lg space-y-3">
+                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                    <Clock className="h-5 w-5" />
+                    <span className="font-semibold">Trial Mode</span>
+                  </div>
+                  <div className="text-sm space-y-1">
+                    <p>Bookings: {license.trialBookingsUsed} / {TRIAL_LIMITS.maxBookings} used</p>
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div 
+                        className="bg-amber-500 h-2 rounded-full transition-all"
+                        style={{ width: `${(license.trialBookingsUsed / TRIAL_LIMITS.maxBookings) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Trial limitations: Reports, Backup/Import, and Customization are disabled. Receipts show watermark.
+                  </p>
+                </div>
+              )}
+
+              {license.isExpired && (
+                <div className="p-4 border border-red-500/30 bg-red-500/5 rounded-lg space-y-2">
+                  <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+                    <AlertCircle className="h-5 w-5" />
+                    <span className="font-semibold">License Expired</span>
+                  </div>
+                  <p className="text-sm">
+                    Your license expired on {license.expiryDate ? formatDate(license.expiryDate) : 'N/A'}. 
+                    You can still view data and export backups. Enter a renewal key below to restore full access.
+                  </p>
+                </div>
+              )}
+
+              {license.isInvalid && (
+                <div className="p-4 border border-red-600/30 bg-red-600/5 rounded-lg space-y-2">
+                  <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+                    <AlertCircle className="h-5 w-5" />
+                    <span className="font-semibold">Invalid License</span>
+                  </div>
+                  <p className="text-sm">
+                    The stored license is not valid for this device. Please contact support for assistance.
+                  </p>
+                </div>
+              )}
+
+              {/* Activation Key Input */}
+              <div className="space-y-2">
+                <Label htmlFor="licenseKey">
+                  {license.isActive ? "Renewal Key" : "Activation Key"}
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="licenseKey"
+                    value={licenseKey}
+                    onChange={(e) => setLicenseKey(e.target.value)}
+                    placeholder="HMS-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXX"
+                    className="font-mono"
+                  />
+                  <Button 
+                    onClick={() => {
+                      const result = license.activate(licenseKey);
+                      if (!result.success) {
+                        toast({ 
+                          title: "Activation Failed", 
+                          description: result.error,
+                          variant: "destructive"
+                        });
+                      } else {
+                        setLicenseKey("");
+                      }
+                    }}
+                    disabled={!licenseKey.trim()}
+                  >
+                    {license.isActive ? "Renew" : "Activate"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Enter the license key provided by your software vendor
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Business Profile Tab */}
         <TabsContent value="profile" className="space-y-6">

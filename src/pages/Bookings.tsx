@@ -11,14 +11,19 @@ import { getAllItems, addItem, updateItem, deleteItem, getItem, Booking, Guest, 
 import { uid } from "@/lib/id";
 import { nowIso, todayIso, daysBetweenIso, formatDate } from "@/lib/dates";
 import { calculateSubtotal, applyDiscount, applySurcharge, calculateTotal, formatCurrency, Discount, Surcharge } from "@/lib/calculations";
-import { Plus, Edit, Trash2, Calendar, User, DoorOpen, FileText, CreditCard } from "lucide-react";
+import { Plus, Edit, Trash2, Calendar, User, DoorOpen, FileText, CreditCard, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { printReceipt } from "@/lib/receipt";
 import { getTotalPaidForBooking } from "@/lib/payments";
 import PaymentForm from "@/components/PaymentForm";
 import { naturalSort } from "@/lib/naturalSort";
+import { useLicense } from "@/hooks/useLicense";
+import { LicenseBanner } from "@/components/LicenseBanner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { TRIAL_LIMITS } from "@/lib/license";
 
 export default function Bookings() {
+  const license = useLicense();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [guests, setGuests] = useState<Guest[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -138,6 +143,18 @@ export default function Bookings() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
+    // License enforcement - check if creating new booking
+    if (!editingBooking) {
+      if (!license.canCreateBooking) {
+        if (license.isTrialLimitReached) {
+          toast.error(`Trial limit reached. Maximum ${TRIAL_LIMITS.maxBookings} bookings in Trial Mode.`);
+        } else {
+          toast.error(license.getBlockedReason('create_booking'));
+        }
+        return;
+      }
+    }
+
     if (!formData.guestId) {
       toast.error("Please select a guest");
       return;
@@ -256,7 +273,9 @@ export default function Bookings() {
   const summary = calculateBookingSummary();
 
   return (
-    <div className="p-8">
+    <div className="flex flex-col">
+      <LicenseBanner />
+      <div className="p-8">
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Bookings</h1>
@@ -267,7 +286,10 @@ export default function Bookings() {
           if (!open) resetForm();
         }}>
           <DialogTrigger asChild>
-            <Button onClick={() => setIsDialogOpen(true)}>
+            <Button 
+              onClick={() => setIsDialogOpen(true)}
+              disabled={!license.canCreateBooking && !editingBooking}
+            >
               <Plus className="mr-2 h-4 w-4" />
               New Booking
             </Button>
@@ -632,6 +654,7 @@ export default function Bookings() {
         booking={paymentBooking}
         onPaymentAdded={loadData}
       />
+    </div>
     </div>
   );
 }
