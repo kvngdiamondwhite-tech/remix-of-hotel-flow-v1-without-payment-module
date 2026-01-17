@@ -5,10 +5,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { getAllItems, Room, Booking, Guest } from "@/lib/db";
 import { getAllPayments, Payment } from "@/lib/payments";
-import { DollarSign, AlertCircle, DoorOpen, Users } from "lucide-react";
+import { DollarSign, AlertCircle, DoorOpen, Users, Clock, Shield } from "lucide-react";
 import { todayIso, formatDate } from "@/lib/dates";
 import { formatCurrency } from "@/lib/calculations";
 import { useSettings } from "@/hooks/useSettings";
+import { useLicense } from "@/hooks/useLicense";
+import { LicenseBanner, LicenseStatusBadge } from "@/components/LicenseBanner";
+import { TRIAL_LIMITS } from "@/lib/license";
 
 interface RecentActivity {
   id: string;
@@ -30,6 +33,7 @@ interface RevenueBreakdown {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { settings } = useSettings();
+  const license = useLicense();
   const [stats, setStats] = useState({
     todayRevenue: 0,
     outstandingDebt: 0,
@@ -166,21 +170,28 @@ export default function Dashboard() {
     : 'No payments yet';
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="mb-6 flex items-center gap-4">
-        {settings.logo && (
-          <img 
-            src={settings.logo} 
-            alt="Hotel logo" 
-            className="h-12 w-12 object-contain rounded-lg"
-          />
-        )}
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">{settings.hotelName}</h1>
-          <p className="text-muted-foreground text-sm">Real-time Status Console</p>
+    <div className="flex flex-col">
+      {/* License Banner */}
+      <LicenseBanner />
+      
+      <div className="p-6 max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            {settings.logo && (
+              <img 
+                src={settings.logo} 
+                alt="Hotel logo" 
+                className="h-12 w-12 object-contain rounded-lg"
+              />
+            )}
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">{settings.hotelName}</h1>
+              <p className="text-muted-foreground text-sm">Real-time Status Console</p>
+            </div>
+          </div>
+          <LicenseStatusBadge />
         </div>
-      </div>
 
       {/* KPI Cards - 4 cards in a row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -326,6 +337,7 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
