@@ -1,7 +1,7 @@
 // IndexedDB setup and operations
 
 const DB_NAME = 'HotelManagementDB';
-const DB_VERSION = 151;
+const DB_VERSION = 500;
 
 export interface RoomType {
   id: string;
@@ -82,7 +82,17 @@ export async function initDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-    request.onerror = () => reject(request.error);
+    request.onerror = () => {
+      console.error('IndexedDB open error:', request.error);
+      reject(request.error);
+    };
+    
+    // Handle blocked state - another tab has the DB open with older version
+    request.onblocked = () => {
+      console.warn('IndexedDB blocked - close other tabs and refresh');
+      // Still try to proceed, the block may resolve
+    };
+    
     request.onsuccess = () => {
       dbInstance = request.result;
       
@@ -91,8 +101,16 @@ export async function initDB(): Promise<IDBDatabase> {
         dbInstance = null;
       };
       
-      dbInstance.onerror = () => {
+      dbInstance.onerror = (event) => {
+        console.error('IndexedDB error:', event);
         dbInstance = null;
+      };
+      
+      // Handle version change from another tab
+      dbInstance.onversionchange = () => {
+        dbInstance?.close();
+        dbInstance = null;
+        console.log('Database version changed, connection closed');
       };
       
       resolve(dbInstance);
