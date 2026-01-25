@@ -1,7 +1,7 @@
 // IndexedDB setup and operations
 
 const DB_NAME = 'HotelManagementDB';
-const DB_VERSION = 500;
+const DB_VERSION = 1002;
 
 export interface RoomType {
   id: string;
@@ -57,13 +57,23 @@ export interface Booking {
   updatedAt: string;
 }
 
+export interface Expenditure {
+  id: string;
+  date: string;
+  category: string;
+  description: string;
+  amount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 let dbInstance: IDBDatabase | null = null;
 
 function isConnectionValid(db: IDBDatabase | null): boolean {
   if (!db) return false;
   try {
     // Try to access objectStoreNames - this will throw if connection is closed
-    db.objectStoreNames;
+    db.objectStoreNames.length;
     return true;
   } catch {
     return false;
@@ -148,6 +158,21 @@ export async function initDB(): Promise<IDBDatabase> {
         bookingsStore.createIndex('checkInDate', 'checkInDate', { unique: false });
         bookingsStore.createIndex('checkOutDate', 'checkOutDate', { unique: false });
         bookingsStore.createIndex('paymentStatus', 'paymentStatus', { unique: false });
+      }
+
+      // Payments Store
+      if (!db.objectStoreNames.contains('payments')) {
+        const paymentsStore = db.createObjectStore('payments', { keyPath: 'id' });
+        paymentsStore.createIndex('bookingId', 'bookingId', { unique: false });
+        paymentsStore.createIndex('paymentDate', 'paymentDate', { unique: false });
+        paymentsStore.createIndex('paymentMethod', 'paymentMethod', { unique: false });
+      }
+
+      // Expenditures Store
+      if (!db.objectStoreNames.contains('expenditures')) {
+        const expendituresStore = db.createObjectStore('expenditures', { keyPath: 'id' });
+        expendituresStore.createIndex('date', 'date', { unique: false });
+        expendituresStore.createIndex('category', 'category', { unique: false });
       }
     };
   });

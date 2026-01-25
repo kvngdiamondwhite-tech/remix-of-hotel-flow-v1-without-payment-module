@@ -5,6 +5,7 @@ export interface PaymentMethodConfig {
   id: string;
   name: string;
   enabled: boolean;
+  color?: string; // Hex color or design token for UI accents (e.g., '#10b981', 'hsl(var(--primary))')
 }
 
 export interface HotelSettings {
@@ -34,11 +35,11 @@ export interface HotelSettings {
 
 const SETTINGS_KEY = 'hotel_settings';
 
-// Default payment methods
+// Default payment methods with default colors
 export const DEFAULT_PAYMENT_METHODS: PaymentMethodConfig[] = [
-  { id: 'cash', name: 'Cash', enabled: true },
-  { id: 'transfer', name: 'Bank Transfer', enabled: true },
-  { id: 'pos', name: 'POS / Card', enabled: true },
+  { id: 'cash', name: 'Cash', enabled: true, color: '#10b981' }, // green
+  { id: 'transfer', name: 'Bank Transfer', enabled: true, color: '#3b82f6' }, // blue
+  { id: 'pos', name: 'POS / Card', enabled: true, color: '#f59e0b' }, // amber
 ];
 
 export const DEFAULT_SETTINGS: HotelSettings = {
@@ -69,6 +70,18 @@ export const SUPPORTED_CURRENCIES = [
   { code: 'ZAR', name: 'South African Rand', symbol: 'R' },
   { code: 'KES', name: 'Kenyan Shilling', symbol: 'KSh' },
   { code: 'GHS', name: 'Ghanaian Cedi', symbol: 'GH₵' },
+];
+
+// Color palette for payment method selection
+export const PAYMENT_METHOD_COLORS = [
+  { label: 'Green', value: '#10b981' },
+  { label: 'Blue', value: '#3b82f6' },
+  { label: 'Amber', value: '#f59e0b' },
+  { label: 'Purple', value: '#8b5cf6' },
+  { label: 'Pink', value: '#ec4899' },
+  { label: 'Red', value: '#ef4444' },
+  { label: 'Cyan', value: '#06b6d4' },
+  { label: 'Indigo', value: '#6366f1' },
 ];
 
 export function getSettings(): HotelSettings {
@@ -125,4 +138,12 @@ export function isDebtAllowed(): boolean {
 // Check if soft delete mode is enabled
 export function isSoftDeleteEnabled(): boolean {
   return getSettings().softDeleteMode;
+}
+
+// Get payment method color by ID (used by Dashboard, Reports, Payments)
+export function getPaymentMethodColor(methodId: string): string {
+  const settings = getSettings();
+  const method = settings.paymentMethods.find(pm => pm.id === methodId);
+  // Return method's color if defined, otherwise fallback to neutral gray
+  return method?.color || '#6b7280';
 }

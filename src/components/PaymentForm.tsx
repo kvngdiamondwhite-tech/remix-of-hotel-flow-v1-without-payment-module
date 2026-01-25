@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { addPayment, Payment, calculateBookingPaymentStatus, updateBookingPaymentStatus } from "@/lib/payments";
 import { Booking, Guest, Room, getItem } from "@/lib/db";
 import { formatCurrency } from "@/lib/calculations";
-import { todayIso } from "@/lib/dates";
+import { todayIso, currentTimeHHmm } from "@/lib/dates";
 import { CreditCard, DollarSign } from "lucide-react";
 import { getEnabledPaymentMethods, PaymentMethodConfig } from "@/lib/settings";
 
@@ -29,6 +29,7 @@ export default function PaymentForm({ open, onOpenChange, booking, onPaymentAdde
   const [paymentType, setPaymentType] = useState<'deposit' | 'full' | 'partial'>('full');
   const [amount, setAmount] = useState("");
   const [paymentDate, setPaymentDate] = useState(todayIso());
+  const [paymentTime, setPaymentTime] = useState(currentTimeHHmm());
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [guestName, setGuestName] = useState("");
@@ -65,6 +66,7 @@ export default function PaymentForm({ open, onOpenChange, booking, onPaymentAdde
     setPaymentType('full');
     setAmount("");
     setPaymentDate(todayIso());
+    setPaymentTime(currentTimeHHmm());
     setNotes("");
     setPaymentInfo(null);
   };
@@ -91,6 +93,7 @@ export default function PaymentForm({ open, onOpenChange, booking, onPaymentAdde
         paymentType,
         amount: amountNum,
         paymentDate,
+        paymentTime,
         notes: notes.trim(),
       });
 
@@ -215,6 +218,17 @@ export default function PaymentForm({ open, onOpenChange, booking, onPaymentAdde
                 required
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="paymentTime">Payment Time</Label>
+            <Input
+              id="paymentTime"
+              type="time"
+              value={paymentTime}
+              onChange={(e) => setPaymentTime(e.target.value)}
+              required
+            />
           </div>
 
           <div className="space-y-2">

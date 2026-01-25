@@ -13,7 +13,7 @@ import { nowIso, todayIso, daysBetweenIso, formatDate } from "@/lib/dates";
 import { calculateSubtotal, applyDiscount, applySurcharge, calculateTotal, formatCurrency, Discount, Surcharge } from "@/lib/calculations";
 import { Plus, Edit, Trash2, Calendar, User, DoorOpen, FileText, CreditCard, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { printReceipt } from "@/lib/receipt";
+import { printInvoice } from "@/lib/receipt";
 import { getTotalPaidForBooking } from "@/lib/payments";
 import PaymentForm from "@/components/PaymentForm";
 import { naturalSort } from "@/lib/naturalSort";
@@ -33,6 +33,10 @@ export default function Bookings() {
   const [paymentBooking, setPaymentBooking] = useState<Booking | null>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [bookingPayments, setBookingPayments] = useState<Record<string, number>>({});
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterRoom, setFilterRoom] = useState<string>("all");
+  const [filterStartDate, setFilterStartDate] = useState<string>("");
+  const [filterEndDate, setFilterEndDate] = useState<string>("");
   const [formData, setFormData] = useState({
     guestId: "",
     roomId: "",
@@ -237,6 +241,14 @@ export default function Bookings() {
           updatedAt: nowIso(),
         };
         await addItem('bookings', newBooking);
+        
+        // Update room status to Occupied for new bookings
+        const roomToUpdate = room as Room;
+        await updateItem('rooms', {
+          ...roomToUpdate,
+          status: 'Occupied' as const,
+        });
+        
         toast.success("Booking created successfully");
       }
 
@@ -269,6 +281,37 @@ export default function Bookings() {
   function getRoomNumber(roomId: string): string {
     return rooms.find(r => r.id === roomId)?.roomNumber || "Unknown";
   }
+
+  // Filter and search bookings based on search term, room, and date range
+  const filteredBookings = useMemo(() => {
+    return bookings.filter(booking => {
+      const guestName = getGuestName(booking.guestId).toLowerCase();
+      const roomNumber = getRoomNumber(booking.roomId).toLowerCase();
+      const searchLower = searchTerm.toLowerCase();
+      
+      // Search filter (guest name or room number)
+      const matchesSearch = searchTerm === "" || 
+        guestName.includes(searchLower) || 
+        roomNumber.includes(searchLower);
+      
+      // Room filter
+      const matchesRoom = filterRoom === "all" || booking.roomId === filterRoom;
+      
+      // Date range filter (check-in and check-out dates overlap with filter range)
+      let matchesDateRange = true;
+      if (filterStartDate || filterEndDate) {
+        const bookingStart = new Date(booking.checkInDate);
+        const bookingEnd = new Date(booking.checkOutDate);
+        const filterStart = filterStartDate ? new Date(filterStartDate) : new Date('1900-01-01');
+        const filterEnd = filterEndDate ? new Date(filterEndDate) : new Date('2100-12-31');
+        
+        // Check if booking dates overlap with filter dates
+        matchesDateRange = bookingStart <= filterEnd && bookingEnd >= filterStart;
+      }
+      
+      return matchesSearch && matchesRoom && matchesDateRange;
+    });
+  }, [bookings, searchTerm, filterRoom, filterStartDate, filterEndDate]);
 
   const summary = calculateBookingSummary();
 
@@ -547,7 +590,97 @@ export default function Bookings() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {bookings.map((booking) => (
+          {/* Search and Filter Bar */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="space-y-4">
+                <div className="flex flex-col md:flex-row gap-4">
+                  {/* Search Input */}
+                  <div className="flex-1">
+                    <Label htmlFor="search" className="mb-2 block">Search</Label>
+                    <Input
+                      id="search"
+                      placeholder="Search by guest name or room number..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  
+                  {/* Room Filter */}
+                  <div className="w-full md:w-48">
+                    <Label htmlFor="room-filter" className="mb-2 block">Filter by Room</Label>
+                    <Select value={filterRoom} onValueChange={setFilterRoom}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Rooms" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Rooms</SelectItem>
+                        {naturalSort(rooms, r => r.roomNumber).map((room) => (
+                          <SelectItem key={room.id} value={room.id}>
+                            {room.roomNumber}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Date Range Filter */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="start-date" className="mb-2 block">Check-in From</Label>
+                    <Input
+                      id="start-date"
+                      type="date"
+                      value={filterStartDate}
+                      onChange={(e) => setFilterStartDate(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="end-date" className="mb-2 block">Check-out Until</Label>
+                    <Input
+                      id="end-date"
+                      type="date"
+                      value={filterEndDate}
+                      onChange={(e) => setFilterEndDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Clear Filters Button */}
+                {(searchTerm || filterRoom !== "all" || filterStartDate || filterEndDate) && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearchTerm("");
+                      setFilterRoom("all");
+                      setFilterStartDate("");
+                      setFilterEndDate("");
+                    }}
+                    className="w-full md:w-auto"
+                  >
+                    Clear Filters
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Results Summary */}
+          <div className="text-sm text-muted-foreground">
+            Showing {filteredBookings.length} of {bookings.length} bookings
+          </div>
+
+          {/* Filtered Bookings List */}
+          {filteredBookings.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <p className="text-muted-foreground">No bookings match your search criteria</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+          {filteredBookings.map((booking) => (
             <Card key={booking.id} className="hover:shadow-lg transition-shadow">
               <CardContent className="pt-6">
                 <div className="flex justify-between items-start">
@@ -615,12 +748,12 @@ export default function Bookings() {
                         const room = await getItem<Room>('rooms', booking.roomId);
                         const roomType = await getItem<RoomType>('roomTypes', booking.roomTypeId);
                         if (guest && room && roomType) {
-                          printReceipt(booking, guest, room, roomType);
+                          await printInvoice(booking, guest, room, roomType);
                         } else {
                           toast.error("Failed to load booking details");
                         }
                       }}
-                      title="Print Receipt"
+                      title="Print Invoice"
                     >
                       <FileText className="h-4 w-4" />
                     </Button>
@@ -645,6 +778,8 @@ export default function Bookings() {
               </CardContent>
             </Card>
           ))}
+            </>
+          )}
         </div>
       )}
 

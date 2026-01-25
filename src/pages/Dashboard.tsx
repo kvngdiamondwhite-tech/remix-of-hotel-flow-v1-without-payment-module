@@ -12,6 +12,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useLicense } from "@/hooks/useLicense";
 import { LicenseBanner, LicenseStatusBadge } from "@/components/LicenseBanner";
 import { TRIAL_LIMITS } from "@/lib/license";
+import { getPaymentMethodColor } from "@/lib/settings";
 
 interface RecentActivity {
   id: string;
@@ -24,9 +25,7 @@ interface RecentActivity {
 }
 
 interface RevenueBreakdown {
-  cash: number;
-  pos: number;
-  transfer: number;
+  byMethod: Record<string, number>;
   debt: number;
 }
 
@@ -42,15 +41,22 @@ export default function Dashboard() {
     todayLodges: 0,
   });
   const [revenueBreakdown, setRevenueBreakdown] = useState<RevenueBreakdown>({
-    cash: 0,
-    pos: 0,
-    transfer: 0,
+    byMethod: {},
     debt: 0,
   });
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
 
   useEffect(() => {
+    // Load dashboard data immediately on mount
     loadDashboardData();
+    
+    // Set up polling to refresh data every 5 seconds for real-time updates
+    const interval = setInterval(() => {
+      loadDashboardData();
+    }, 5000);
+
+    // Cleanup interval on component unmount
+    return () => clearInterval(interval);
   }, []);
 
   async function loadDashboardData() {
@@ -63,7 +69,8 @@ export default function Dashboard() {
 
     const today = todayIso();
 
-    // Calculate occupancy
+    // Calculate occupancy from room status (updated by Bookings module)
+    // Rooms are marked as 'Occupied' when a booking is created
     const occupiedRooms = rooms.filter(r => r.status === 'Occupied').length;
     const totalRooms = rooms.length;
 
@@ -74,17 +81,15 @@ export default function Dashboard() {
     const todayPayments = payments.filter(p => p.paymentDate.startsWith(today));
     const todayRevenue = todayPayments.reduce((sum, p) => sum + p.amount, 0);
 
-    // Revenue breakdown by payment method
-    const breakdown: RevenueBreakdown = { cash: 0, pos: 0, transfer: 0, debt: 0 };
+    // Revenue breakdown by payment method - dynamically calculated
+    const byMethod: Record<string, number> = {};
+    // Initialize with all methods to ensure consistency
+    settings.paymentMethods.forEach(pm => {
+      byMethod[pm.id] = 0;
+    });
+    // Aggregate payments by method ID
     todayPayments.forEach(p => {
-      const method = p.paymentMethod?.toLowerCase() || '';
-      if (method.includes('cash')) {
-        breakdown.cash += p.amount;
-      } else if (method.includes('pos') || method.includes('card')) {
-        breakdown.pos += p.amount;
-      } else if (method.includes('transfer')) {
-        breakdown.transfer += p.amount;
-      }
+      byMethod[p.paymentMethod] = (byMethod[p.paymentMethod] || 0) + p.amount;
     });
 
     // Calculate outstanding debt (sum of all unpaid balances)
@@ -100,7 +105,6 @@ export default function Dashboard() {
         totalDebt += balance;
       }
     });
-    breakdown.debt = totalDebt;
 
     // Build recent activity from recent bookings and payments
     const guestMap = new Map(guests.map(g => [g.id, g.fullName]));
@@ -139,7 +143,7 @@ export default function Dashboard() {
       totalRooms,
       todayLodges,
     });
-    setRevenueBreakdown(breakdown);
+    setRevenueBreakdown({ byMethod, debt: totalDebt });
     setRecentActivity(activities);
   }
 
@@ -158,12 +162,14 @@ export default function Dashboard() {
     }
   };
 
-  // Format revenue breakdown for display
-  const breakdownItems = [
-    { label: 'Cash', amount: revenueBreakdown.cash, color: 'text-green-600' },
-    { label: 'POS', amount: revenueBreakdown.pos, color: 'text-blue-600' },
-    { label: 'Transfer', amount: revenueBreakdown.transfer, color: 'text-purple-600' },
-  ].filter(item => item.amount > 0);
+  // Format revenue breakdown for display using dynamic payment methods
+  const breakdownItems = settings.paymentMethods
+    .map(method => ({
+      id: method.id,
+      label: method.name,
+      amount: revenueBreakdown.byMethod[method.id] || 0,
+    }))
+    .filter(item => item.amount > 0);
 
   const breakdownText = breakdownItems.length > 0 
     ? breakdownItems.map(item => `${item.label}: ${formatCurrency(item.amount)}`).join(' | ')
@@ -273,19 +279,23 @@ export default function Dashboard() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-              <span className="text-sm text-muted-foreground">Cash</span>
-              <span className="font-semibold text-green-600">{formatCurrency(revenueBreakdown.cash)}</span>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-              <span className="text-sm text-muted-foreground">POS</span>
-              <span className="font-semibold text-blue-600">{formatCurrency(revenueBreakdown.pos)}</span>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-              <span className="text-sm text-muted-foreground">Transfer</span>
-              <span className="font-semibold text-purple-600">{formatCurrency(revenueBreakdown.transfer)}</span>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+            {settings.paymentMethods.map((method) => {
+              // Get the method's accent color for the border
+              const methodColor = getPaymentMethodColor(method.id);
+              return (
+                <div 
+                  key={method.id} 
+                  className="flex justify-between items-center p-3 rounded-lg border-l-4"
+                  style={{ borderLeftColor: methodColor, backgroundColor: `${methodColor}10` }}
+                >
+                  <span className="text-sm text-muted-foreground">{method.name}</span>
+                  <span className="font-semibold" style={{ color: methodColor }}>
+                    {formatCurrency(revenueBreakdown.byMethod[method.id] || 0)}
+                  </span>
+                </div>
+              );
+            })}
+            <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg border-l-4" style={{ borderLeftColor: '#ef4444' }}>
               <span className="text-sm text-muted-foreground">Outstanding</span>
               <span className="font-semibold text-red-600">{formatCurrency(revenueBreakdown.debt)}</span>
             </div>

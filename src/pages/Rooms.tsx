@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { getAllItems, addItem, updateItem, deleteItem, Room, RoomType } from "@/lib/db";
 import { uid } from "@/lib/id";
 import { nowIso } from "@/lib/dates";
+import { formatCurrency } from "@/lib/calculations";
 import { Plus, Edit, Trash2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { naturalSort } from "@/lib/naturalSort";
@@ -149,6 +150,10 @@ export default function Rooms() {
 
   function getRoomTypeName(roomTypeId: string): string {
     return roomTypes.find(rt => rt.id === roomTypeId)?.name || "Unknown";
+  }
+
+  function getRoomPrice(roomTypeId: string): number {
+    return roomTypes.find(rt => rt.id === roomTypeId)?.basePrice || 0;
   }
 
   function getStatusColor(status: Room['status']) {
@@ -323,6 +328,9 @@ export default function Rooms() {
                     </h3>
                     <p className="text-sm text-muted-foreground mt-1">
                       {getRoomTypeName(room.roomTypeId)}
+                    </p>
+                    <p className="text-lg font-semibold text-primary mt-2">
+                      {formatCurrency(getRoomPrice(room.roomTypeId))} / night
                     </p>
                   </div>
                   <div className="flex gap-1">

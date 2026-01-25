@@ -12,6 +12,7 @@ export interface Payment {
   paymentType: 'deposit' | 'full' | 'partial';
   amount: number;
   paymentDate: string;
+  paymentTime: string; // HH:mm format for chronological ordering
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -20,35 +21,11 @@ export interface Payment {
 const PAYMENTS_STORE = 'payments';
 
 // Initialize payments store (called on app startup)
+// The payments store is now created in db.ts during the main database initialization
 export async function initPaymentsStore(): Promise<void> {
-  const db = await initDB();
-  
-  // Check if payments store already exists
-  if (db.objectStoreNames.contains(PAYMENTS_STORE)) {
-    return;
-  }
-  
-  // Close existing connection and reopen with higher version
-  const currentVersion = db.version;
-  db.close();
-  
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open('HotelManagementDB', currentVersion + 1);
-    
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
-    
-    request.onupgradeneeded = (event) => {
-      const database = (event.target as IDBOpenDBRequest).result;
-      
-      if (!database.objectStoreNames.contains(PAYMENTS_STORE)) {
-        const paymentsStore = database.createObjectStore(PAYMENTS_STORE, { keyPath: 'id' });
-        paymentsStore.createIndex('bookingId', 'bookingId', { unique: false });
-        paymentsStore.createIndex('paymentDate', 'paymentDate', { unique: false });
-        paymentsStore.createIndex('paymentMethod', 'paymentMethod', { unique: false });
-      }
-    };
-  });
+  // Simply ensure the database is initialized
+  // The payments store is created in db.ts onupgradeneeded handler
+  await initDB();
 }
 
 // Add a new payment

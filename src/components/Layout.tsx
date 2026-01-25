@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Home, Bed, DoorOpen, Users, Calendar, Hotel, Settings, CreditCard, AlertCircle, FileText, Briefcase } from "lucide-react";
+import { Home, Bed, DoorOpen, Users, Calendar, Hotel, Settings, CreditCard, AlertCircle, FileText, Briefcase, TrendingDown, BarChart3 } from "lucide-react";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -15,6 +15,8 @@ export default function Layout({ children }: LayoutProps) {
     { to: "/payments", icon: CreditCard, label: "Payments" },
     { to: "/debt", icon: AlertCircle, label: "Outstanding" },
     { to: "/reports", icon: FileText, label: "Reports" },
+    { to: "/business-analysis", icon: BarChart3, label: "Business Analysis" },
+    { to: "/expenditures", icon: TrendingDown, label: "Expenditures" },
     { to: "/extras", icon: Briefcase, label: "Extras" },
     { to: "/settings", icon: Settings, label: "Settings" },
   ];

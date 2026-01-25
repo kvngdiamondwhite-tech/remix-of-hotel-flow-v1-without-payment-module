@@ -3,20 +3,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger 
 } from "@/components/ui/alert-dialog";
-import { CreditCard, Search, Trash2, Calendar, User, DoorOpen, Filter } from "lucide-react";
+import { CreditCard, Search, Trash2, Calendar, User, DoorOpen, Filter, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Payment, getAllPayments, deletePayment, initPaymentsStore } from "@/lib/payments";
 import { Booking, Guest, Room, getAllItems, getItem } from "@/lib/db";
 import { formatCurrency } from "@/lib/calculations";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import PaymentForm from "@/components/PaymentForm";
+import { useSettings } from "@/hooks/useSettings";
+import { getPaymentMethodColor } from "@/lib/settings";
+import { printPaymentReceipt } from "@/lib/receipt";
+import { getTotalPaidForBooking } from "@/lib/payments";
 
 export default function Payments() {
+  const { settings } = useSettings();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [guests, setGuests] = useState<Guest[]>([]);
@@ -24,8 +30,25 @@ export default function Payments() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMethod, setFilterMethod] = useState<string>("all");
+  const [filterStartDate, setFilterStartDate] = useState<string>("");
+  const [filterEndDate, setFilterEndDate] = useState<string>("");
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+
+  // Helper to get payment method name by ID
+  const getPaymentMethodName = (methodId: string): string => {
+    const method = settings.paymentMethods.find(pm => pm.id === methodId);
+    return method ? method.name : methodId;
+  };
+
+  // Helper to get dynamic payment method totals
+  const getPaymentMethodTotals = (): Record<string, number> => {
+    const totals: Record<string, number> = {};
+    settings.paymentMethods.forEach(pm => {
+      totals[pm.id] = payments.filter(p => p.paymentMethod === pm.id).reduce((s, p) => s + p.amount, 0);
+    });
+    return totals;
+  };
 
   useEffect(() => {
     loadData();
@@ -41,9 +64,15 @@ export default function Payments() {
         getAllItems<Room>('rooms'),
       ]);
       
-      setPayments(paymentsData.sort((a, b) => 
-        new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime()
-      ));
+      // Sort by payment date and time in chronological order (newest first)
+      setPayments(paymentsData.sort((a, b) => {
+        const dateCompare = new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime();
+        if (dateCompare !== 0) return dateCompare;
+        // If dates are same, sort by time (fallback to '00:00' if missing)
+        const timeA = a.paymentTime || '00:00';
+        const timeB = b.paymentTime || '00:00';
+        return timeB.localeCompare(timeA);
+      }));
       setBookings(bookingsData);
       setGuests(guestsData);
       setRooms(roomsData);
@@ -85,13 +114,15 @@ export default function Payments() {
     }
   };
 
-  const getMethodBadgeColor = (method: string) => {
-    switch (method) {
-      case 'cash': return 'bg-success/20 text-success border-success/30';
-      case 'transfer': return 'bg-primary/20 text-primary border-primary/30';
-      case 'pos': return 'bg-warning/20 text-warning border-warning/30';
-      default: return 'bg-muted text-muted-foreground';
-    }
+  const getMethodBadgeColor = (methodId: string) => {
+    // Get the method's defined color and create badge styling
+    const color = getPaymentMethodColor(methodId);
+    // Apply the color as border and semi-transparent background for badge
+    return {
+      borderColor: color,
+      backgroundColor: `${color}20`, // 20% opacity
+      color: color,
+    };
   };
 
   const getTypeBadgeColor = (type: string) => {
@@ -108,8 +139,18 @@ export default function Payments() {
     const roomNumber = getRoomNumber(payment.bookingId).toLowerCase();
     const matchesSearch = guestName.includes(searchTerm.toLowerCase()) || 
                           roomNumber.includes(searchTerm.toLowerCase());
-    const matchesFilter = filterMethod === 'all' || payment.paymentMethod === filterMethod;
-    return matchesSearch && matchesFilter;
+    const matchesMethod = filterMethod === 'all' || payment.paymentMethod === filterMethod;
+    
+    // Date range filtering
+    let matchesDateRange = true;
+    if (filterStartDate) {
+      matchesDateRange = matchesDateRange && payment.paymentDate >= filterStartDate;
+    }
+    if (filterEndDate) {
+      matchesDateRange = matchesDateRange && payment.paymentDate <= filterEndDate;
+    }
+    
+    return matchesSearch && matchesMethod && matchesDateRange;
   });
 
   const totalPayments = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
@@ -138,30 +179,72 @@ export default function Payments() {
       {/* Filters */}
       <Card className="mb-6">
         <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by guest name or room number..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
+          <div className="space-y-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by guest name or room number..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <div className="flex gap-2 items-center">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <Select value={filterMethod} onValueChange={setFilterMethod}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Payment Method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Methods</SelectItem>
+                    {settings.paymentMethods.map((method) => (
+                      <SelectItem key={method.id} value={method.id}>
+                        {method.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="flex gap-2 items-center">
-              <Filter className="h-4 w-4 text-muted-foreground" />
-              <Select value={filterMethod} onValueChange={setFilterMethod}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Payment Method" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Methods</SelectItem>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="transfer">Bank Transfer</SelectItem>
-                  <SelectItem value="pos">POS / Card</SelectItem>
-                </SelectContent>
-              </Select>
+
+            {/* Date Range Filter */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="payment-start-date" className="mb-2 block text-sm">Payment From</Label>
+                <Input
+                  id="payment-start-date"
+                  type="date"
+                  value={filterStartDate}
+                  onChange={(e) => setFilterStartDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="payment-end-date" className="mb-2 block text-sm">Payment Until</Label>
+                <Input
+                  id="payment-end-date"
+                  type="date"
+                  value={filterEndDate}
+                  onChange={(e) => setFilterEndDate(e.target.value)}
+                />
+              </div>
             </div>
+
+            {/* Clear Filters Button */}
+            {(searchTerm || filterMethod !== "all" || filterStartDate || filterEndDate) && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSearchTerm("");
+                  setFilterMethod("all");
+                  setFilterStartDate("");
+                  setFilterEndDate("");
+                }}
+                className="w-full md:w-auto"
+              >
+                Clear Filters
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -174,30 +257,19 @@ export default function Payments() {
             <div className="text-2xl font-bold">{payments.length}</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-sm text-muted-foreground">Cash Payments</div>
-            <div className="text-2xl font-bold text-success">
-              {formatCurrency(payments.filter(p => p.paymentMethod === 'cash').reduce((s, p) => s + p.amount, 0))}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-sm text-muted-foreground">Transfer Payments</div>
-            <div className="text-2xl font-bold text-primary">
-              {formatCurrency(payments.filter(p => p.paymentMethod === 'transfer').reduce((s, p) => s + p.amount, 0))}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-sm text-muted-foreground">POS/Card Payments</div>
-            <div className="text-2xl font-bold text-warning">
-              {formatCurrency(payments.filter(p => p.paymentMethod === 'pos').reduce((s, p) => s + p.amount, 0))}
-            </div>
-          </CardContent>
-        </Card>
+        {settings.paymentMethods.map((method) => {
+          const methodTotal = getPaymentMethodTotals()[method.id] || 0;
+          return (
+            <Card key={method.id}>
+              <CardContent className="pt-6">
+                <div className="text-sm text-muted-foreground">{method.name} Payments</div>
+                <div className="text-2xl font-bold text-primary">
+                  {formatCurrency(methodTotal)}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Payments List */}
@@ -239,15 +311,19 @@ export default function Payments() {
                     <div>
                       <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
                         <Calendar className="h-4 w-4" />
-                        <span>Date</span>
+                        <span>Date & Time</span>
                       </div>
                       <p className="font-semibold text-foreground">{formatDate(payment.paymentDate)}</p>
+                      <p className="text-sm text-muted-foreground">{payment.paymentTime || '00:00'}</p>
                     </div>
                     <div>
                       <div className="text-muted-foreground text-sm mb-1">Method / Type</div>
                       <div className="flex flex-wrap gap-1">
-                        <Badge variant="outline" className={getMethodBadgeColor(payment.paymentMethod)}>
-                          {payment.paymentMethod.toUpperCase()}
+                        <Badge 
+                          variant="outline"
+                          style={getMethodBadgeColor(payment.paymentMethod)}
+                        >
+                          {getPaymentMethodName(payment.paymentMethod)}
                         </Badge>
                         <Badge className={getTypeBadgeColor(payment.paymentType)}>
                           {payment.paymentType}
@@ -260,6 +336,31 @@ export default function Payments() {
                     </div>
                   </div>
                   <div className="flex gap-1 ml-4">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={async () => {
+                        try {
+                          const booking = bookings.find(b => b.id === payment.bookingId);
+                          const guest = guests.find(g => g.id === booking?.guestId);
+                          const room = rooms.find(r => r.id === booking?.roomId);
+                          const methodName = getPaymentMethodName(payment.paymentMethod);
+                          const totalPaid = await getTotalPaidForBooking(payment.bookingId);
+                          
+                          if (booking && guest && room) {
+                            printPaymentReceipt(payment, booking, guest, room, methodName, totalPaid);
+                          } else {
+                            toast.error("Failed to load payment details");
+                          }
+                        } catch (error) {
+                          toast.error("Failed to generate receipt");
+                          console.error(error);
+                        }
+                      }}
+                      title="Generate Receipt"
+                    >
+                      <FileText className="h-4 w-4" />
+                    </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="ghost" size="icon" title="Delete Payment">

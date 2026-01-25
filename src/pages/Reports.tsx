@@ -13,6 +13,7 @@ import { formatDate } from "@/lib/dates";
 import { FileText, Calendar, DollarSign, TrendingUp, Users, Building, Printer } from "lucide-react";
 import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { useSettings } from "@/hooks/useSettings";
+import { PaymentMethodConfig, getPaymentMethodColor } from "@/lib/settings";
 
 interface ReportData {
   bookings: Booking[];
@@ -80,9 +81,9 @@ export default function Reports() {
       isWithinInterval(parseISO(p.paymentDate), { start: dateStart, end: dateEnd })
     );
     if (payments.length === 0) return "-";
-    // Return comma-separated unique methods
-    const methods = [...new Set(payments.map(p => p.paymentMethod))];
-    return methods.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(", ");
+    // Return comma-separated unique method names (not IDs)
+    const methodIds = [...new Set(payments.map(p => p.paymentMethod))];
+    return methodIds.map(id => getPaymentMethodName(id)).join(", ");
   };
 
   // Get amount paid for a booking on a specific date
@@ -95,6 +96,27 @@ export default function Reports() {
       .reduce((sum, p) => sum + p.amount, 0);
   };
 
+  // Build dynamic payment totals based on all payment methods (including disabled ones)
+  // This ensures historical data remains accurate regardless of current settings
+  const getPaymentTotalsByMethod = (payments: Payment[]): Record<string, number> => {
+    const totals: Record<string, number> = {};
+    // Include ALL methods from settings to ensure consistency
+    settings.paymentMethods.forEach(pm => {
+      totals[pm.id] = 0;
+    });
+    // Aggregate payments by method ID
+    payments.forEach(p => {
+      totals[p.paymentMethod] = (totals[p.paymentMethod] || 0) + p.amount;
+    });
+    return totals;
+  };
+
+  // Helper to get payment method name by ID
+  const getPaymentMethodName = (methodId: string): string => {
+    const method = settings.paymentMethods.find(pm => pm.id === methodId);
+    return method ? method.name : methodId;
+  };
+
   // Daily Lodge History Report - now shows ALL bookings active on this date
   function getDailyLodgeHistory() {
     const dateStart = startOfDay(parseISO(selectedDate));
@@ -104,10 +126,9 @@ export default function Reports() {
       isWithinInterval(parseISO(p.paymentDate), { start: dateStart, end: dateEnd })
     );
 
-    const posTotal = dailyPayments.filter((p) => p.paymentMethod === "pos").reduce((sum, p) => sum + p.amount, 0);
-    const cashTotal = dailyPayments.filter((p) => p.paymentMethod === "cash").reduce((sum, p) => sum + p.amount, 0);
-    const transferTotal = dailyPayments.filter((p) => p.paymentMethod === "transfer").reduce((sum, p) => sum + p.amount, 0);
-
+    // Dynamically calculate totals for each payment method
+    const methodTotals = getPaymentTotalsByMethod(dailyPayments);
+    
     // Get ALL bookings active on this date (checked in on or before, checked out on or after)
     const activeBookings = data.bookings.filter((b) => {
       const checkIn = parseISO(b.checkInDate);
@@ -141,13 +162,12 @@ export default function Reports() {
     // Calculate daily outstanding (debt for active bookings)
     const dailyDebt = enrichedBookings.reduce((sum, b) => sum + b.balance, 0);
 
-    const grandTotal = posTotal + cashTotal + transferTotal + dailyDebt;
+    // Sum all method totals for grand total
+    const grandTotal = Object.values(methodTotals).reduce((sum, val) => sum + val, 0) + dailyDebt;
 
     return {
       dailyPayments,
-      posTotal,
-      cashTotal,
-      transferTotal,
+      methodTotals,
       dailyDebt,
       grandTotal,
       activeBookings,
@@ -164,11 +184,12 @@ export default function Reports() {
       isWithinInterval(parseISO(p.paymentDate), { start: dateStart, end: dateEnd })
     );
 
+    const methodTotals = getPaymentTotalsByMethod(dailyPayments);
+    const total = Object.values(methodTotals).reduce((sum, val) => sum + val, 0);
+
     return {
-      total: dailyPayments.reduce((sum, p) => sum + p.amount, 0),
-      pos: dailyPayments.filter((p) => p.paymentMethod === "pos").reduce((sum, p) => sum + p.amount, 0),
-      cash: dailyPayments.filter((p) => p.paymentMethod === "cash").reduce((sum, p) => sum + p.amount, 0),
-      transfer: dailyPayments.filter((p) => p.paymentMethod === "transfer").reduce((sum, p) => sum + p.amount, 0),
+      total,
+      methodTotals,
       payments: dailyPayments,
     };
   }
@@ -186,13 +207,14 @@ export default function Reports() {
       isWithinInterval(parseISO(b.checkInDate), { start: monthStart, end: monthEnd })
     );
 
+    const methodTotals = getPaymentTotalsByMethod(monthlyPayments);
+    const totalRevenue = Object.values(methodTotals).reduce((sum, val) => sum + val, 0);
+
     return {
-      totalRevenue: monthlyPayments.reduce((sum, p) => sum + p.amount, 0),
+      totalRevenue,
       bookingsCount: monthlyBookings.length,
       paymentsCount: monthlyPayments.length,
-      pos: monthlyPayments.filter((p) => p.paymentMethod === "pos").reduce((sum, p) => sum + p.amount, 0),
-      cash: monthlyPayments.filter((p) => p.paymentMethod === "cash").reduce((sum, p) => sum + p.amount, 0),
-      transfer: monthlyPayments.filter((p) => p.paymentMethod === "transfer").reduce((sum, p) => sum + p.amount, 0),
+      methodTotals,
     };
   }
 
@@ -221,6 +243,8 @@ export default function Reports() {
     const endDate = parseISO(occupancyEndDate);
     const totalRooms = data.rooms.length;
 
+    // For date range reports, check bookings that overlap with the selected period
+    // and also count rooms with 'Occupied' status for current occupancy
     const occupiedRoomIds = new Set(
       data.bookings
         .filter((b) => {
@@ -230,6 +254,11 @@ export default function Reports() {
         })
         .map((b) => b.roomId)
     );
+
+    // Also include rooms currently marked as 'Occupied' (set by Bookings module)
+    data.rooms
+      .filter(r => r.status === 'Occupied')
+      .forEach(r => occupiedRoomIds.add(r.id));
 
     const occupiedCount = occupiedRoomIds.size;
     const availableCount = totalRooms - occupiedCount;
@@ -339,18 +368,19 @@ export default function Reports() {
             <CardContent className="space-y-6">
               {/* Summary Totals - Inline Row Format */}
               <div className="report-totals-container">
-                <div className="report-total-row pos">
-                  <span className="report-total-label">POS</span>
-                  <span className="report-total-amount">{formatCurrency(lodgeHistory.posTotal)}</span>
-                </div>
-                <div className="report-total-row cash">
-                  <span className="report-total-label">Cash</span>
-                  <span className="report-total-amount">{formatCurrency(lodgeHistory.cashTotal)}</span>
-                </div>
-                <div className="report-total-row transfer">
-                  <span className="report-total-label">Transfer</span>
-                  <span className="report-total-amount">{formatCurrency(lodgeHistory.transferTotal)}</span>
-                </div>
+                {settings.paymentMethods.map((method) => {
+                  const methodColor = getPaymentMethodColor(method.id);
+                  return (
+                    <div 
+                      key={method.id} 
+                      className="report-total-row"
+                      style={{ borderLeftColor: methodColor }}
+                    >
+                      <span className="report-total-label" style={{ color: methodColor }}>{method.name}</span>
+                      <span className="report-total-amount">{formatCurrency(lodgeHistory.methodTotals[method.id] || 0)}</span>
+                    </div>
+                  );
+                })}
                 <div className="report-total-row outstanding">
                   <span className="report-total-label">Outstanding Debt</span>
                   <span className="report-total-amount">{formatCurrency(lodgeHistory.dailyDebt)}</span>
@@ -436,18 +466,19 @@ export default function Reports() {
             <CardContent className="space-y-6">
               {/* Revenue Totals - Inline Row Format */}
               <div className="report-totals-container">
-                <div className="report-total-row pos">
-                  <span className="report-total-label">POS</span>
-                  <span className="report-total-amount">{formatCurrency(dailyRevenue.pos)}</span>
-                </div>
-                <div className="report-total-row cash">
-                  <span className="report-total-label">Cash</span>
-                  <span className="report-total-amount">{formatCurrency(dailyRevenue.cash)}</span>
-                </div>
-                <div className="report-total-row transfer">
-                  <span className="report-total-label">Transfer</span>
-                  <span className="report-total-amount">{formatCurrency(dailyRevenue.transfer)}</span>
-                </div>
+                {settings.paymentMethods.map((method) => {
+                  const methodColor = getPaymentMethodColor(method.id);
+                  return (
+                    <div 
+                      key={method.id}
+                      className="report-total-row"
+                      style={{ borderLeftColor: methodColor }}
+                    >
+                      <span className="report-total-label" style={{ color: methodColor }}>{method.name}</span>
+                      <span className="report-total-amount">{formatCurrency(dailyRevenue.methodTotals[method.id] || 0)}</span>
+                    </div>
+                  );
+                })}
                 <div className="report-total-row grand-total">
                   <span className="report-total-label">Total Revenue</span>
                   <span className="report-total-amount">{formatCurrency(dailyRevenue.total)}</span>
@@ -475,7 +506,7 @@ export default function Reports() {
                           <TableRow key={payment.id}>
                             <TableCell>{format(parseISO(payment.paymentDate), "HH:mm")}</TableCell>
                             <TableCell>{booking ? getGuestName(booking.guestId) : "Unknown"}</TableCell>
-                            <TableCell className="capitalize">{payment.paymentMethod}</TableCell>
+                            <TableCell>{getPaymentMethodName(payment.paymentMethod)}</TableCell>
                             <TableCell className="text-right font-medium">{formatCurrency(payment.amount)}</TableCell>
                           </TableRow>
                         );
@@ -511,18 +542,19 @@ export default function Reports() {
             <CardContent>
               {/* Monthly Summary Totals - Inline Row Format */}
               <div className="report-totals-container mb-6">
-                <div className="report-total-row pos">
-                  <span className="report-total-label">POS</span>
-                  <span className="report-total-amount">{formatCurrency(monthlyRevenue.pos)}</span>
-                </div>
-                <div className="report-total-row cash">
-                  <span className="report-total-label">Cash</span>
-                  <span className="report-total-amount">{formatCurrency(monthlyRevenue.cash)}</span>
-                </div>
-                <div className="report-total-row transfer">
-                  <span className="report-total-label">Transfer</span>
-                  <span className="report-total-amount">{formatCurrency(monthlyRevenue.transfer)}</span>
-                </div>
+                {settings.paymentMethods.map((method) => {
+                  const methodColor = getPaymentMethodColor(method.id);
+                  return (
+                    <div 
+                      key={method.id}
+                      className="report-total-row"
+                      style={{ borderLeftColor: methodColor }}
+                    >
+                      <span className="report-total-label" style={{ color: methodColor }}>{method.name}</span>
+                      <span className="report-total-amount">{formatCurrency(monthlyRevenue.methodTotals[method.id] || 0)}</span>
+                    </div>
+                  );
+                })}
                 <div className="report-total-row grand-total">
                   <span className="report-total-label">Total Revenue</span>
                   <span className="report-total-amount">{formatCurrency(monthlyRevenue.totalRevenue)}</span>
@@ -547,36 +579,18 @@ export default function Reports() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <TableRow>
-                    <TableCell>POS</TableCell>
-                    <TableCell className="text-right">{formatCurrency(monthlyRevenue.pos)}</TableCell>
-                    <TableCell className="text-right">
-                      {monthlyRevenue.totalRevenue > 0
-                        ? Math.round((monthlyRevenue.pos / monthlyRevenue.totalRevenue) * 100)
-                        : 0}
-                      %
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Cash</TableCell>
-                    <TableCell className="text-right">{formatCurrency(monthlyRevenue.cash)}</TableCell>
-                    <TableCell className="text-right">
-                      {monthlyRevenue.totalRevenue > 0
-                        ? Math.round((monthlyRevenue.cash / monthlyRevenue.totalRevenue) * 100)
-                        : 0}
-                      %
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Transfer</TableCell>
-                    <TableCell className="text-right">{formatCurrency(monthlyRevenue.transfer)}</TableCell>
-                    <TableCell className="text-right">
-                      {monthlyRevenue.totalRevenue > 0
-                        ? Math.round((monthlyRevenue.transfer / monthlyRevenue.totalRevenue) * 100)
-                        : 0}
-                      %
-                    </TableCell>
-                  </TableRow>
+                  {settings.paymentMethods.map((method) => (
+                    <TableRow key={method.id}>
+                      <TableCell>{method.name}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(monthlyRevenue.methodTotals[method.id] || 0)}</TableCell>
+                      <TableCell className="text-right">
+                        {monthlyRevenue.totalRevenue > 0
+                          ? Math.round(((monthlyRevenue.methodTotals[method.id] || 0) / monthlyRevenue.totalRevenue) * 100)
+                          : 0}
+                        %
+                      </TableCell>
+                    </TableRow>
+                  ))}
                   <TableRow className="font-bold">
                     <TableCell>Total</TableCell>
                     <TableCell className="text-right">{formatCurrency(monthlyRevenue.totalRevenue)}</TableCell>

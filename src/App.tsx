@@ -13,6 +13,8 @@ import Bookings from "./pages/Bookings";
 import Payments from "./pages/Payments";
 import Debt from "./pages/Debt";
 import Reports from "./pages/Reports";
+import BusinessAnalysis from "./pages/BusinessAnalysis";
+import Expenditures from "./pages/Expenditures";
 import Settings from "./pages/Settings";
 import Extras from "./pages/Extras";
 import NotFound from "./pages/NotFound";
@@ -44,6 +46,8 @@ const App = () => {
               <Route path="/payments" element={<Payments />} />
               <Route path="/debt" element={<Debt />} />
               <Route path="/reports" element={<Reports />} />
+              <Route path="/business-analysis" element={<BusinessAnalysis />} />
+              <Route path="/expenditures" element={<Expenditures />} />
               <Route path="/extras" element={<Extras />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />

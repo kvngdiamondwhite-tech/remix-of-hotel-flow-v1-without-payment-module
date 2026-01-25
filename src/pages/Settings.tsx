@@ -12,7 +12,7 @@ import { exportAllData, importData, hasExistingData, clearAllData } from "@/lib/
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useSettings } from "@/hooks/useSettings";
-import { SUPPORTED_CURRENCIES, HotelSettings, PaymentMethodConfig, DEFAULT_PAYMENT_METHODS } from "@/lib/settings";
+import { SUPPORTED_CURRENCIES, PAYMENT_METHOD_COLORS, HotelSettings, PaymentMethodConfig, DEFAULT_PAYMENT_METHODS } from "@/lib/settings";
 import { uid } from "@/lib/id";
 import { ImportConfirmationModal, ImportMode } from "@/components/ImportConfirmationModal";
 import { useLicense } from "@/hooks/useLicense";
@@ -34,7 +34,9 @@ export default function Settings() {
   // Payment method editing state
   const [editingMethodId, setEditingMethodId] = useState<string | null>(null);
   const [editingMethodName, setEditingMethodName] = useState("");
+  const [editingMethodColor, setEditingMethodColor] = useState("");
   const [newMethodName, setNewMethodName] = useState("");
+  const [newMethodColor, setNewMethodColor] = useState(PAYMENT_METHOD_COLORS[0].value);
 
   // Import modal state (TASK 3)
   const [showImportModal, setShowImportModal] = useState(false);
@@ -212,12 +214,14 @@ export default function Settings() {
       id: uid(),
       name: newMethodName.trim(),
       enabled: true,
+      color: newMethodColor, // Include selected color
     };
     setFormData(prev => ({
       ...prev,
       paymentMethods: [...prev.paymentMethods, newMethod],
     }));
     setNewMethodName("");
+    setNewMethodColor(PAYMENT_METHOD_COLORS[0].value); // Reset to default color
   };
 
   const handleTogglePaymentMethod = (id: string) => {
@@ -244,6 +248,7 @@ export default function Settings() {
   const handleEditPaymentMethod = (pm: PaymentMethodConfig) => {
     setEditingMethodId(pm.id);
     setEditingMethodName(pm.name);
+    setEditingMethodColor(pm.color || PAYMENT_METHOD_COLORS[0].value); // Use method's color or default
   };
 
   const handleSavePaymentMethodName = () => {
@@ -254,11 +259,12 @@ export default function Settings() {
     setFormData(prev => ({
       ...prev,
       paymentMethods: prev.paymentMethods.map(pm =>
-        pm.id === editingMethodId ? { ...pm, name: editingMethodName.trim() } : pm
+        pm.id === editingMethodId ? { ...pm, name: editingMethodName.trim(), color: editingMethodColor } : pm
       ),
     }));
     setEditingMethodId(null);
     setEditingMethodName("");
+    setEditingMethodColor("");
   };
 
   return (
@@ -627,9 +633,34 @@ export default function Settings() {
                         <Input
                           value={editingMethodName}
                           onChange={(e) => setEditingMethodName(e.target.value)}
-                          className="h-8"
+                          className="h-8 flex-1"
                           autoFocus
                         />
+                        {/* Color picker for payment method */}
+                        <Select value={editingMethodColor} onValueChange={setEditingMethodColor}>
+                          <SelectTrigger className="w-32 h-8">
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-4 h-4 rounded-full border"
+                                style={{ backgroundColor: editingMethodColor }}
+                              />
+                              <SelectValue />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PAYMENT_METHOD_COLORS.map((colorOption) => (
+                              <SelectItem key={colorOption.value} value={colorOption.value}>
+                                <div className="flex items-center gap-2">
+                                  <div 
+                                    className="w-4 h-4 rounded-full border"
+                                    style={{ backgroundColor: colorOption.value }}
+                                  />
+                                  {colorOption.label}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <Button size="sm" variant="ghost" onClick={handleSavePaymentMethodName}>
                           <Check className="h-4 w-4" />
                         </Button>
@@ -643,6 +674,12 @@ export default function Settings() {
                           <Switch
                             checked={pm.enabled}
                             onCheckedChange={() => handleTogglePaymentMethod(pm.id)}
+                          />
+                          {/* Color indicator for payment method */}
+                          <div 
+                            className="w-4 h-4 rounded-full border-2 border-gray-300"
+                            style={{ backgroundColor: pm.color || '#6b7280' }}
+                            title={`Color: ${pm.color || 'default'}`}
                           />
                           <span className={pm.enabled ? "font-medium" : "text-muted-foreground line-through"}>
                             {pm.name}
@@ -669,7 +706,33 @@ export default function Settings() {
                   value={newMethodName}
                   onChange={(e) => setNewMethodName(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddPaymentMethod()}
+                  className="flex-1"
                 />
+                {/* Color picker for new payment method */}
+                <Select value={newMethodColor} onValueChange={setNewMethodColor}>
+                  <SelectTrigger className="w-32">
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="w-4 h-4 rounded-full border"
+                        style={{ backgroundColor: newMethodColor }}
+                      />
+                      <SelectValue />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHOD_COLORS.map((colorOption) => (
+                      <SelectItem key={colorOption.value} value={colorOption.value}>
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-4 h-4 rounded-full border"
+                            style={{ backgroundColor: colorOption.value }}
+                          />
+                          {colorOption.label}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button onClick={handleAddPaymentMethod} variant="outline">
                   <Plus className="h-4 w-4 mr-2" />
                   Add
