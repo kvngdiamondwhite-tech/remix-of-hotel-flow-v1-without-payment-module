@@ -1,6 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Calculator as CalculatorIcon, StickyNote, CheckSquare, CalendarDays } from 'lucide-react';
-import Calculator from '@/components/extras/Calculator';
+import Calculator from '@/components/calculator/Calculator';
 import Notes from '@/components/extras/Notes';
 import ToDo from '@/components/extras/ToDo';
 import SimpleCalendar from '@/components/extras/SimpleCalendar';

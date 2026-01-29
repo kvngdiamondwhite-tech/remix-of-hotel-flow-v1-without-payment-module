@@ -4,13 +4,22 @@ import { Button } from "@/components/ui/button";
 import { getAllItems, Booking, Expenditure } from "@/lib/db";
 import { getAllPayments, Payment } from "@/lib/payments";
 import { formatCurrency } from "@/lib/calculations";
-import { TrendingUp, TrendingDown, DollarSign, BarChart3, Printer } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, BarChart3, Printer, Calendar } from "lucide-react";
 import { useSettings } from "@/hooks/useSettings";
+import { todayIso, isoToDate } from "@/lib/dates";
 
 interface AnalysisData {
   bookings: Booking[];
   payments: Payment[];
   expenditures: Expenditure[];
+}
+
+type PeriodType = 'today' | 'thisWeek' | 'thisMonth' | 'thisYear' | 'custom' | null;
+
+interface PeriodRange {
+  startDate: string;
+  endDate: string;
+  label: string;
 }
 
 export default function BusinessAnalysis() {
@@ -21,6 +30,81 @@ export default function BusinessAnalysis() {
     expenditures: [],
   });
   const [loading, setLoading] = useState(true);
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('thisMonth');
+  const [customStartDate, setCustomStartDate] = useState<string>(todayIso());
+  const [customEndDate, setCustomEndDate] = useState<string>(todayIso());
+
+  // Calculate period range based on selected period
+  const periodRange = useMemo((): PeriodRange => {
+    const today = new Date();
+    const todayStr = todayIso();
+
+    switch (selectedPeriod) {
+      case 'today':
+        return {
+          startDate: todayStr,
+          endDate: todayStr,
+          label: 'Today',
+        };
+      case 'thisWeek': {
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - today.getDay()); // Start of week (Sunday)
+        const weekEnd = new Date(today);
+        weekEnd.setDate(today.getDate() + (6 - today.getDay())); // End of week (Saturday)
+        return {
+          startDate: weekStart.toISOString().split('T')[0],
+          endDate: weekEnd.toISOString().split('T')[0],
+          label: 'This Week',
+        };
+      }
+      case 'thisMonth': {
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        return {
+          startDate: monthStart.toISOString().split('T')[0],
+          endDate: monthEnd.toISOString().split('T')[0],
+          label: 'This Month',
+        };
+      }
+      case 'thisYear': {
+        const yearStart = new Date(today.getFullYear(), 0, 1);
+        const yearEnd = new Date(today.getFullYear(), 11, 31);
+        return {
+          startDate: yearStart.toISOString().split('T')[0],
+          endDate: yearEnd.toISOString().split('T')[0],
+          label: 'This Year',
+        };
+      }
+      case 'custom':
+        return {
+          startDate: customStartDate,
+          endDate: customEndDate,
+          label: `${customStartDate} to ${customEndDate}`,
+        };
+      default:
+        return {
+          startDate: todayStr,
+          endDate: todayStr,
+          label: 'Current Month',
+        };
+    }
+  }, [selectedPeriod, customStartDate, customEndDate]);
+
+  // Filter payments by period
+  const filteredPayments = useMemo(() => {
+    return data.payments.filter((payment) => {
+      const paymentDate = payment.paymentDate;
+      return paymentDate >= periodRange.startDate && paymentDate <= periodRange.endDate;
+    });
+  }, [data.payments, periodRange]);
+
+  // Filter expenditures by period
+  const filteredExpenditures = useMemo(() => {
+    return data.expenditures.filter((exp) => {
+      const expDate = exp.date;
+      return expDate >= periodRange.startDate && expDate <= periodRange.endDate;
+    });
+  }, [data.expenditures, periodRange]);
 
   useEffect(() => {
     loadData();
@@ -42,15 +126,15 @@ export default function BusinessAnalysis() {
     }
   }
 
-  // Calculate total revenue from all payments
+  // Calculate total revenue from filtered payments
   const totalRevenue = useMemo(() => {
-    return data.payments.reduce((sum, payment) => sum + payment.amount, 0);
-  }, [data.payments]);
+    return filteredPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  }, [filteredPayments]);
 
-  // Calculate total expenditures from all expense records
+  // Calculate total expenditures from filtered expense records
   const totalExpenditures = useMemo(() => {
-    return data.expenditures.reduce((sum, exp) => sum + exp.amount, 0);
-  }, [data.expenditures]);
+    return filteredExpenditures.reduce((sum, exp) => sum + exp.amount, 0);
+  }, [filteredExpenditures]);
 
   // Calculate gross profit
   const grossProfit = useMemo(() => {
@@ -63,18 +147,18 @@ export default function BusinessAnalysis() {
     return (grossProfit / totalRevenue) * 100;
   }, [grossProfit, totalRevenue]);
 
-  // Calculate metrics by category
+  // Calculate metrics by category (filtered)
   const expendituresByCategory = useMemo(() => {
     const categories: Record<string, number> = {};
-    data.expenditures.forEach((exp) => {
+    filteredExpenditures.forEach((exp) => {
       categories[exp.category] = (categories[exp.category] || 0) + exp.amount;
     });
     return Object.entries(categories)
       .map(([category, amount]) => ({ category, amount }))
       .sort((a, b) => b.amount - a.amount);
-  }, [data.expenditures]);
+  }, [filteredExpenditures]);
 
-  // Calculate booking and payment statistics
+  // Calculate booking and payment statistics (filtered)
   const bookingStats = useMemo(() => {
     const totalBookings = data.bookings.length;
     const totalBookedAmount = data.bookings.reduce((sum, b) => sum + b.total, 0);
@@ -121,6 +205,91 @@ export default function BusinessAnalysis() {
         </Button>
       </div>
 
+      {/* Period Selector */}
+      <Card className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 border-slate-200 dark:border-slate-700">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Analysis Period
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Preset Period Buttons */}
+          <div className="flex flex-wrap gap-2 print:hidden">
+            <Button
+              variant={selectedPeriod === 'today' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectedPeriod('today')}
+            >
+              Today
+            </Button>
+            <Button
+              variant={selectedPeriod === 'thisWeek' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectedPeriod('thisWeek')}
+            >
+              This Week
+            </Button>
+            <Button
+              variant={selectedPeriod === 'thisMonth' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectedPeriod('thisMonth')}
+            >
+              This Month
+            </Button>
+            <Button
+              variant={selectedPeriod === 'thisYear' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectedPeriod('thisYear')}
+            >
+              This Year
+            </Button>
+          </div>
+
+          {/* Custom Date Range */}
+          <div className="pt-2 border-t print:hidden">
+            <p className="text-sm font-medium mb-3">Custom Range</p>
+            <div className="flex gap-3 items-end">
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground block mb-1">Start Date</label>
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 dark:border-slate-600 text-sm"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground block mb-1">End Date</label>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 dark:border-slate-600 text-sm"
+                />
+              </div>
+              <Button
+                variant={selectedPeriod === 'custom' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setSelectedPeriod('custom')}
+              >
+                Apply Custom Range
+              </Button>
+            </div>
+          </div>
+
+          {/* Current Period Display */}
+          <div className="mt-3 p-3 bg-white dark:bg-slate-900 rounded-md border">
+            <p className="text-sm">
+              <span className="font-medium">Analysis Period:</span> <span className="ml-2">{periodRange.label}</span>
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {periodRange.startDate} to {periodRange.endDate}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Financial Overview - Main Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Revenue */}
@@ -136,7 +305,7 @@ export default function BusinessAnalysis() {
               {formatCurrency(totalRevenue)}
             </div>
             <p className="text-xs text-green-600 dark:text-green-300 mt-1">
-              {data.payments.length} payments received
+              {filteredPayments.length} payments received in period
             </p>
           </CardContent>
         </Card>
@@ -154,7 +323,7 @@ export default function BusinessAnalysis() {
               {formatCurrency(totalExpenditures)}
             </div>
             <p className="text-xs text-red-600 dark:text-red-300 mt-1">
-              {data.expenditures.length} expense records
+              {filteredExpenditures.length} expense records in period
             </p>
           </CardContent>
         </Card>
@@ -349,11 +518,10 @@ export default function BusinessAnalysis() {
           <CardTitle className="text-sm">Report Information</CardTitle>
         </CardHeader>
         <CardContent className="text-xs text-muted-foreground space-y-1">
-          <p>✓ This is a read-only analysis report using live data from all modules</p>
-          <p>✓ Revenue data sourced from: All payments across all bookings</p>
-          <p>✓ Expenditure data sourced from: All expense records by category</p>
           <p>✓ Report generated on: {new Date().toLocaleString()}</p>
-          <p>✓ All calculations are performed in-memory and do not persist to database</p>
+          <p>✓ Analysis Period: <span className="font-semibold text-foreground">{periodRange.label}</span> ({periodRange.startDate} to {periodRange.endDate})</p>
+          <p>✓ Revenue data sourced from: {filteredPayments.length} payments in selected period</p>
+          <p>✓ Expenditure data sourced from: {filteredExpenditures.length} expense records in selected period</p>
         </CardContent>
       </Card>
     </div>

@@ -228,8 +228,9 @@ export default function Rooms() {
                 <Select
                   value={formData.status}
                   onValueChange={(value: Room['status']) => setFormData({ ...formData, status: value })}
+                  disabled={editingRoom?.status === 'Occupied'}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={editingRoom?.status === 'Occupied' ? 'opacity-60 cursor-not-allowed' : ''}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -239,6 +240,11 @@ export default function Rooms() {
                     <SelectItem value="Out of Service">Out of Service</SelectItem>
                   </SelectContent>
                 </Select>
+                {editingRoom?.status === 'Occupied' && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    ℹ️ Occupied rooms have automatic status updates. Room will return to Available after checkout time.
+                  </p>
+                )}
               </div>
               <div className="flex justify-end gap-3">
                 <Button

@@ -1,5 +1,8 @@
 // IndexedDB setup and operations
 
+import { bookingWindowMs, MinimalSettings } from './dates';
+import { getSettings } from './settings';
+
 const DB_NAME = 'HotelManagementDB';
 const DB_VERSION = 1002;
 
@@ -13,6 +16,15 @@ export interface RoomType {
   createdAt: string;
   updatedAt: string;
 }
+// End Booking
+
+// NOTE: Backwards-compatible optional time fields for hourly/short stays
+export type BookingTimeFields = {
+  startAtMs?: number;
+  endAtMs?: number;
+  stayType?: 'overnight' | 'hourly';
+  durationMinutes?: number;
+};
 
 export interface Room {
   id: string;
@@ -55,6 +67,11 @@ export interface Booking {
   notes: string;
   createdAt: string;
   updatedAt: string;
+  // Optional time-aware fields for short/hourly stays (backwards-compatible)
+  startAtMs?: number;
+  endAtMs?: number;
+  stayType?: 'overnight' | 'hourly';
+  durationMinutes?: number;
 }
 
 export interface Expenditure {
@@ -311,16 +328,37 @@ export async function hasOverlappingBooking(
   excludeBookingId?: string
 ): Promise<boolean> {
   const bookings = await getAllItems<Booking>('bookings');
-  
-  return bookings.some(booking => {
-    if (booking.id === excludeBookingId) return false;
-    if (booking.roomId !== roomId) return false;
-    
-    const bookingStart = new Date(booking.checkInDate);
-    const bookingEnd = new Date(booking.checkOutDate);
-    const newStart = new Date(checkIn);
-    const newEnd = new Date(checkOut);
-    
-    return newStart < bookingEnd && newEnd > bookingStart;
+  const settings: MinimalSettings = getSettings();
+
+  // Compute candidate window using bookingWindowMs. If it fails, fall back to simple date-only comparison.
+  let newWindow;
+  try {
+    newWindow = bookingWindowMs({ checkInDate: checkIn, checkOutDate: checkOut }, settings);
+  } catch (err) {
+    const newStart = new Date(checkIn).getTime();
+    const newEnd = new Date(checkOut).getTime();
+    return bookings.some(b => {
+      if (b.id === excludeBookingId) return false;
+      if (b.roomId !== roomId) return false;
+      const bStart = new Date(b.checkInDate).getTime();
+      const bEnd = new Date(b.checkOutDate).getTime();
+      return newStart < bEnd && newEnd > bStart;
+    });
+  }
+
+  return bookings.some(b => {
+    if (b.id === excludeBookingId) return false;
+    if (b.roomId !== roomId) return false;
+
+    try {
+      const maybe = b as unknown as { startAtMs?: number; endAtMs?: number; stayType?: 'overnight'|'hourly' };
+      const bWindow = bookingWindowMs({ startAtMs: maybe.startAtMs, endAtMs: maybe.endAtMs, checkInDate: b.checkInDate, checkOutDate: b.checkOutDate, stayType: maybe.stayType }, settings);
+      return newWindow.startAtMs < bWindow.endAtMs && newWindow.endAtMs > bWindow.startAtMs;
+    } catch (err) {
+      // Fallback
+      const bStart = new Date(b.checkInDate).getTime();
+      const bEnd = new Date(b.checkOutDate).getTime();
+      return newWindow.startAtMs < bEnd && newWindow.endAtMs > bStart;
+    }
   });
 }

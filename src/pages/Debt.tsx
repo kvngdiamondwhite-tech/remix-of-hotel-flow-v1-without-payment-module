@@ -299,7 +299,7 @@ export default function Debt() {
                         <span>Room</span>
                       </div>
                       <p className="font-semibold text-foreground">
-                        Room {item.room?.roomNumber || "Unknown"}
+                        {item.room?.roomNumber || "Unknown"}
                       </p>
                       <p className="text-xs text-muted-foreground">{item.roomType?.name}</p>
                     </div>
@@ -391,7 +391,7 @@ export default function Debt() {
                     <div>
                       <p className="text-sm text-muted-foreground">Room</p>
                       <p className="font-semibold">
-                        Room {selectedBooking.room?.roomNumber} - {selectedBooking.roomType?.name}
+                        {selectedBooking.room?.roomNumber} - {selectedBooking.roomType?.name}
                       </p>
                     </div>
                     <div>

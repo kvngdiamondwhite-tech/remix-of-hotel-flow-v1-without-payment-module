@@ -13,6 +13,8 @@ import { useLicense } from "@/hooks/useLicense";
 import { LicenseBanner, LicenseStatusBadge } from "@/components/LicenseBanner";
 import { TRIAL_LIMITS } from "@/lib/license";
 import { getPaymentMethodColor } from "@/lib/settings";
+import { updateRoomStatusesBasedOnCheckout } from "@/lib/roomStatus";
+import FloatingCalculator from "@/components/tools/FloatingCalculator";
 
 interface RecentActivity {
   id: string;
@@ -47,11 +49,16 @@ export default function Dashboard() {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
 
   useEffect(() => {
+    // Update room statuses immediately on mount
+    updateRoomStatusesBasedOnCheckout();
+    
     // Load dashboard data immediately on mount
     loadDashboardData();
     
     // Set up polling to refresh data every 5 seconds for real-time updates
+    // This will automatically update room statuses as checkout times approach/pass
     const interval = setInterval(() => {
+      updateRoomStatusesBasedOnCheckout();
       loadDashboardData();
     }, 5000);
 
@@ -348,6 +355,9 @@ export default function Dashboard() {
         </CardContent>
       </Card>
       </div>
+
+      {/* Floating Calculator Widget - always available on dashboard */}
+      <FloatingCalculator />
     </div>
   );
 }

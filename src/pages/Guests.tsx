@@ -6,15 +6,22 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { getAllItems, addItem, updateItem, deleteItem, Guest } from "@/lib/db";
+import { getAllPayments } from '@/lib/payments';
+import { useNavigate } from 'react-router-dom';
 import { uid } from "@/lib/id";
 import { nowIso } from "@/lib/dates";
-import { Plus, Edit, Trash2, Mail, Phone, MapPin } from "lucide-react";
+import { Plus, Edit, Trash2, Mail, Phone, MapPin, Calendar } from "lucide-react";
+import { formatCurrency } from '@/lib/calculations';
 import { toast } from "sonner";
 
 export default function Guests() {
   const [guests, setGuests] = useState<Guest[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
+  const [historyGuest, setHistoryGuest] = useState<Guest | null>(null);
+  const [historyBookings, setHistoryBookings] = useState<any[]>([]);
+  const [historyPayments, setHistoryPayments] = useState<any[]>([]);
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [formData, setFormData] = useState({
     fullName: "",
@@ -279,6 +286,7 @@ export default function Guests() {
                       variant="ghost"
                       size="icon"
                       onClick={() => handleEdit(guest)}
+                      title="Edit guest"
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -286,8 +294,63 @@ export default function Guests() {
                       variant="ghost"
                       size="icon"
                       onClick={() => handleDelete(guest.id, guest.fullName)}
+                      title="Delete guest"
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        // Quick create booking: navigate to Bookings page with guest prefilled
+                        navigate(`/bookings?guestId=${guest.id}`);
+                      }}
+                      title="Create booking for guest"
+                    >
+                      <Plus className="h-4 w-4 text-primary" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={async () => {
+                        // Open history modal for this guest; fetch bookings, payments and rooms
+                        setHistoryGuest(guest);
+                        try {
+                          const [allBookings, allPayments, allRooms] = await Promise.all([
+                            getAllItems('bookings'),
+                            getAllPayments(),
+                            getAllItems('rooms'),
+                          ]);
+
+                          const guestBookings = (allBookings as any[])
+                            .filter(b => b.guestId === guest.id)
+                            .sort((a,b)=> new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+                          // Build map of roomId -> readable room label (prefer roomNumber)
+                          const roomsMap: Record<string, string> = {};
+                          (allRooms as any[]).forEach(r => {
+                            roomsMap[r.id] = r.roomNumber || r.name || r.id;
+                          });
+
+                          // Enrich bookings with a stable roomLabel for display
+                          const enrichedBookings = guestBookings.map(b => ({
+                            ...b,
+                            roomLabel: roomsMap[b.roomId] || b.roomId,
+                          }));
+
+                          const guestPayments = (allPayments as any[]).filter(p => p.guestId === guest.id || (p.bookingId && enrichedBookings.find(bb=>bb.id===p.bookingId)));
+
+                          setHistoryBookings(enrichedBookings);
+                          setHistoryPayments(guestPayments);
+                        } catch (err) {
+                          console.error('Failed to load guest history', err);
+                          setHistoryBookings([]);
+                          setHistoryPayments([]);
+                        }
+                      }}
+                      title="View guest history"
+                    >
+                      <Calendar className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
@@ -323,6 +386,55 @@ export default function Guests() {
           ))}
         </div>
       )}
+
+      {/* Guest History Dialog */}
+      <Dialog open={!!historyGuest} onOpenChange={(open) => { if (!open) setHistoryGuest(null); }}>
+        <DialogContent className="max-w-3xl p-0">
+          <DialogHeader>
+            <DialogTitle>{historyGuest ? `${historyGuest.fullName} — History` : 'History'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 p-4 max-h-[80vh] overflow-y-auto">
+            <h4 className="font-semibold">Bookings ({historyBookings.length})</h4>
+            {historyBookings.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No bookings found for this guest.</p>
+            ) : (
+              <div className="space-y-2">
+                {historyBookings.map((b) => (
+                  <div key={b.id} className="p-3 border rounded">
+                    <div className="flex justify-between">
+                      <div>
+                        <div className="font-semibold">Room: {b.roomLabel || b.roomId}</div>
+                        <div className="text-sm text-muted-foreground">{b.checkInDate} → {b.checkOutDate}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-medium">{formatCurrency(b.total || 0)}</div>
+                        <div className="text-sm text-muted-foreground">Status: {b.paymentStatus}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <h4 className="font-semibold">Payments ({historyPayments.length})</h4>
+            {historyPayments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No payments found for this guest.</p>
+            ) : (
+              <div className="space-y-2">
+                {historyPayments.map(p => (
+                  <div key={p.id} className="p-2 border rounded flex justify-between">
+                    <div>
+                      <div className="font-medium">{p.paymentMethod}</div>
+                      <div className="text-sm text-muted-foreground">{new Date(p.paymentDate).toLocaleString()}</div>
+                    </div>
+                    <div className="font-semibold">{formatCurrency(p.amount || 0)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

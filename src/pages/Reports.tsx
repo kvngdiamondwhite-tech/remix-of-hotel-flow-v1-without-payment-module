@@ -34,7 +34,11 @@ export default function Reports() {
   });
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [dailyStartDate, setDailyStartDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [dailyEndDate, setDailyEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), "yyyy-MM"));
+  const [monthlyStartDate, setMonthlyStartDate] = useState(format(startOfMonth(new Date()), "yyyy-MM-dd"));
+  const [monthlyEndDate, setMonthlyEndDate] = useState(format(endOfMonth(new Date()), "yyyy-MM-dd"));
   const [occupancyStartDate, setOccupancyStartDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [occupancyEndDate, setOccupancyEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
@@ -119,8 +123,8 @@ export default function Reports() {
 
   // Daily Lodge History Report - now shows ALL bookings active on this date
   function getDailyLodgeHistory() {
-    const dateStart = startOfDay(parseISO(selectedDate));
-    const dateEnd = endOfDay(parseISO(selectedDate));
+    const dateStart = startOfDay(parseISO(dailyStartDate));
+    const dateEnd = endOfDay(parseISO(dailyEndDate));
 
     const dailyPayments = data.payments.filter((p) =>
       isWithinInterval(parseISO(p.paymentDate), { start: dateStart, end: dateEnd })
@@ -129,7 +133,7 @@ export default function Reports() {
     // Dynamically calculate totals for each payment method
     const methodTotals = getPaymentTotalsByMethod(dailyPayments);
     
-    // Get ALL bookings active on this date (checked in on or before, checked out on or after)
+    // Get ALL bookings active on this date range (checked in on or before, checked out on or after)
     const activeBookings = data.bookings.filter((b) => {
       const checkIn = parseISO(b.checkInDate);
       const checkOut = parseISO(b.checkOutDate);
@@ -177,8 +181,8 @@ export default function Reports() {
 
   // Daily Revenue Report
   function getDailyRevenue() {
-    const dateStart = startOfDay(parseISO(selectedDate));
-    const dateEnd = endOfDay(parseISO(selectedDate));
+    const dateStart = startOfDay(parseISO(dailyStartDate));
+    const dateEnd = endOfDay(parseISO(dailyEndDate));
 
     const dailyPayments = data.payments.filter((p) =>
       isWithinInterval(parseISO(p.paymentDate), { start: dateStart, end: dateEnd })
@@ -196,15 +200,15 @@ export default function Reports() {
 
   // Monthly Revenue Summary
   function getMonthlyRevenue() {
-    const monthStart = startOfMonth(parseISO(selectedMonth + "-01"));
-    const monthEnd = endOfMonth(parseISO(selectedMonth + "-01"));
+    const rangeStart = startOfDay(parseISO(monthlyStartDate));
+    const rangeEnd = endOfDay(parseISO(monthlyEndDate));
 
     const monthlyPayments = data.payments.filter((p) =>
-      isWithinInterval(parseISO(p.paymentDate), { start: monthStart, end: monthEnd })
+      isWithinInterval(parseISO(p.paymentDate), { start: rangeStart, end: rangeEnd })
     );
 
     const monthlyBookings = data.bookings.filter((b) =>
-      isWithinInterval(parseISO(b.checkInDate), { start: monthStart, end: monthEnd })
+      isWithinInterval(parseISO(b.checkInDate), { start: rangeStart, end: rangeEnd })
     );
 
     const methodTotals = getPaymentTotalsByMethod(monthlyPayments);
@@ -354,15 +358,17 @@ export default function Reports() {
                 Daily Lodge History Report
               </CardTitle>
               <div className="flex items-center gap-4 print:hidden">
-                <Input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-auto"
-                />
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">From:</span>
+                  <Input type="date" value={dailyStartDate} onChange={(e) => setDailyStartDate(e.target.value)} className="w-auto" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">To:</span>
+                  <Input type="date" value={dailyEndDate} onChange={(e) => setDailyEndDate(e.target.value)} className="w-auto" />
+                </div>
               </div>
               <p className="text-sm text-muted-foreground print:text-foreground">
-                Report for: {format(parseISO(selectedDate), "PPPP")}
+                Period: {format(parseISO(dailyStartDate), "PP")} - {format(parseISO(dailyEndDate), "PP")}
               </p>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -528,15 +534,17 @@ export default function Reports() {
                 Monthly Revenue Summary
               </CardTitle>
               <div className="flex items-center gap-4 print:hidden">
-                <Input
-                  type="month"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="w-auto"
-                />
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">From:</span>
+                  <Input type="date" value={monthlyStartDate} onChange={(e) => setMonthlyStartDate(e.target.value)} className="w-auto" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">To:</span>
+                  <Input type="date" value={monthlyEndDate} onChange={(e) => setMonthlyEndDate(e.target.value)} className="w-auto" />
+                </div>
               </div>
               <p className="text-sm text-muted-foreground print:text-foreground">
-                Report for: {format(parseISO(selectedMonth + "-01"), "MMMM yyyy")}
+                Period: {format(parseISO(monthlyStartDate), "PP")} - {format(parseISO(monthlyEndDate), "PP")}
               </p>
             </CardHeader>
             <CardContent>

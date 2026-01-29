@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { getAllItems, addItem, updateItem, deleteItem, getItem, Booking, Guest, Room, RoomType, hasOverlappingBooking } from "@/lib/db";
+import { bookingWindowMs } from '@/lib/dates';
+import { getSettings } from '@/lib/settings';
 import { uid } from "@/lib/id";
 import { nowIso, todayIso, daysBetweenIso, formatDate } from "@/lib/dates";
 import { calculateSubtotal, applyDiscount, applySurcharge, calculateTotal, formatCurrency, Discount, Surcharge } from "@/lib/calculations";
@@ -21,6 +23,7 @@ import { useLicense } from "@/hooks/useLicense";
 import { LicenseBanner } from "@/components/LicenseBanner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TRIAL_LIMITS } from "@/lib/license";
+import { updateRoomStatusesBasedOnCheckout } from "@/lib/roomStatus";
 
 export default function Bookings() {
   const license = useLicense();
@@ -49,6 +52,10 @@ export default function Bookings() {
     surchargeValue: "",
     paymentStatus: "Pending" as "Paid" | "Pending",
     notes: "",
+    // Hourly/short-stay options (hidden by default)
+    isHourly: false,
+    startDateTime: '', // datetime-local string
+    durationMinutes: '',
   });
 
   useEffect(() => {
@@ -56,6 +63,9 @@ export default function Bookings() {
   }, []);
 
   async function loadData() {
+    // First, update room statuses based on checkout times
+    await updateRoomStatusesBasedOnCheckout();
+    
     const [bookingsData, guestsData, roomsData, typesData] = await Promise.all([
       getAllItems<Booking>('bookings'),
       getAllItems<Guest>('guests'),
@@ -88,6 +98,9 @@ export default function Bookings() {
       surchargeValue: "",
       paymentStatus: "Pending",
       notes: "",
+      isHourly: false,
+      startDateTime: '',
+      durationMinutes: '',
     });
     setEditingBooking(null);
   }
@@ -106,8 +119,24 @@ export default function Bookings() {
       surchargeValue: booking.surcharge?.value.toString() || "",
       paymentStatus: booking.paymentStatus,
       notes: booking.notes,
+      isHourly: booking.stayType === 'hourly',
+      startDateTime: booking.startAtMs ? new Date(booking.startAtMs).toISOString().slice(0,16) : '',
+      durationMinutes: (booking as any).durationMinutes ? String((booking as any).durationMinutes) : '',
     });
     setIsDialogOpen(true);
+  }
+
+  function msToLocalDatetimeInput(ms?: number) {
+    if (!ms) return '';
+    const d = new Date(ms);
+    // format as yyyy-mm-ddThh:MM for input[type=datetime-local]
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const mm = pad(d.getMonth() + 1);
+    const dd = pad(d.getDate());
+    const hh = pad(d.getHours());
+    const min = pad(d.getMinutes());
+    return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
   }
 
   function handleRoomChange(roomId: string) {
@@ -181,16 +210,55 @@ export default function Bookings() {
     }
 
     // Check for overlapping bookings
-    const hasOverlap = await hasOverlappingBooking(
-      formData.roomId,
-      formData.checkInDate,
-      formData.checkOutDate,
-      editingBooking?.id
-    );
+    if (formData.isHourly) {
+      // Build candidate window
+      const settings = getSettings();
+      const startAtMs = formData.startDateTime ? new Date(formData.startDateTime).getTime() : Date.now();
+      const duration = parseInt(formData.durationMinutes || '', 10) || 120; // minutes
+      const endAtMs = startAtMs + Math.round(duration * 60000);
 
-    if (hasOverlap) {
-      toast.error("This room is already booked for the selected dates");
-      return;
+      if (endAtMs <= startAtMs) {
+        toast.error('Invalid duration for hourly booking');
+        return;
+      }
+
+      // Check overlap against existing bookings for the same room
+      const allBookings = await getAllItems<Booking>('bookings');
+      for (const b of allBookings) {
+        if (b.id === editingBooking?.id) continue;
+        if (b.roomId !== formData.roomId) continue;
+        try {
+          const maybe = b as unknown as { startAtMs?: number; endAtMs?: number; stayType?: 'overnight'|'hourly' };
+          const bw = bookingWindowMs({ startAtMs: maybe.startAtMs, endAtMs: maybe.endAtMs, checkInDate: b.checkInDate, checkOutDate: b.checkOutDate, stayType: maybe.stayType }, settings);
+          if (startAtMs < bw.endAtMs && endAtMs > bw.startAtMs) {
+            const roomNum = getRoomNumber(formData.roomId);
+            const from = new Date(bw.startAtMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const to = new Date(bw.endAtMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            toast.error(`Room ${roomNum} already has a booking from ${from}–${to}.`);
+            return;
+          }
+        } catch (err) {
+          // fallback to date-only check
+          const bStart = new Date(b.checkInDate).getTime();
+          const bEnd = new Date(b.checkOutDate).getTime();
+          if (startAtMs < bEnd && endAtMs > bStart) {
+            toast.error('This room already has a booking that overlaps the selected time');
+            return;
+          }
+        }
+      }
+    } else {
+      const hasOverlap = await hasOverlappingBooking(
+        formData.roomId,
+        formData.checkInDate,
+        formData.checkOutDate,
+        editingBooking?.id
+      );
+
+      if (hasOverlap) {
+        toast.error("This room is already booked for the selected dates");
+        return;
+      }
     }
 
     try {
@@ -216,7 +284,19 @@ export default function Bookings() {
           paymentStatus: formData.paymentStatus,
           notes: formData.notes.trim(),
           updatedAt: nowIso(),
-        };
+        } as Booking;
+
+        // If hourly, set explicit time fields
+        if (formData.isHourly) {
+          const startAtMs = formData.startDateTime ? new Date(formData.startDateTime).getTime() : Date.now();
+          const duration = parseInt(formData.durationMinutes || '', 10) || 120;
+          (updated as any).stayType = 'hourly';
+          (updated as any).startAtMs = startAtMs;
+          (updated as any).endAtMs = startAtMs + Math.round(duration * 60000);
+          (updated as any).durationMinutes = duration;
+        } else {
+          (updated as any).stayType = 'overnight';
+        }
         await updateItem('bookings', updated);
         toast.success("Booking updated successfully");
       } else {
@@ -239,7 +319,18 @@ export default function Bookings() {
           notes: formData.notes.trim(),
           createdAt: nowIso(),
           updatedAt: nowIso(),
-        };
+        } as Booking;
+
+        if (formData.isHourly) {
+          const startAtMs = formData.startDateTime ? new Date(formData.startDateTime).getTime() : Date.now();
+          const duration = parseInt(formData.durationMinutes || '', 10) || 120;
+          (newBooking as any).stayType = 'hourly';
+          (newBooking as any).startAtMs = startAtMs;
+          (newBooking as any).endAtMs = startAtMs + Math.round(duration * 60000);
+          (newBooking as any).durationMinutes = duration;
+        } else {
+          (newBooking as any).stayType = 'overnight';
+        }
         await addItem('bookings', newBooking);
         
         // Update room status to Occupied for new bookings
@@ -252,6 +343,8 @@ export default function Bookings() {
         toast.success("Booking created successfully");
       }
 
+      // Refresh room statuses to ensure consistency
+      await updateRoomStatusesBasedOnCheckout();
       await loadData();
       setIsDialogOpen(false);
       resetForm();
@@ -267,6 +360,9 @@ export default function Bookings() {
     try {
       await deleteItem('bookings', id);
       toast.success("Booking deleted successfully");
+      
+      // Refresh room statuses after deletion
+      await updateRoomStatusesBasedOnCheckout();
       await loadData();
     } catch (error) {
       toast.error("Failed to delete booking");
@@ -411,6 +507,43 @@ export default function Bookings() {
                     required
                   />
                 </div>
+
+                <div className="col-span-2 flex items-center gap-3">
+                  <input
+                    id="isHourly"
+                    type="checkbox"
+                    checked={formData.isHourly}
+                    onChange={(e) => setFormData({ ...formData, isHourly: e.target.checked })}
+                  />
+                  <Label htmlFor="isHourly">Short stay / Hourly booking</Label>
+                </div>
+
+                {formData.isHourly && (
+                  <>
+                    <div>
+                      <Label htmlFor="startDateTime">Start (local)</Label>
+                      <Input
+                        id="startDateTime"
+                        type="datetime-local"
+                        value={formData.startDateTime}
+                        onChange={(e) => setFormData({ ...formData, startDateTime: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="durationMinutes">Duration (minutes)</Label>
+                      <Input
+                        id="durationMinutes"
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={formData.durationMinutes}
+                        onChange={(e) => setFormData({ ...formData, durationMinutes: e.target.value })}
+                        placeholder="120"
+                      />
+                      <p className="text-sm text-muted-foreground mt-1">Set duration from 1 minute upward (e.g., 30, 90, 120).</p>
+                    </div>
+                  </>
+                )}
 
                 <div className="col-span-2">
                   <Label htmlFor="rate">Rate per Night *</Label>
@@ -697,7 +830,7 @@ export default function Bookings() {
                         <DoorOpen className="h-4 w-4" />
                         <span>Room</span>
                       </div>
-                      <p className="font-semibold text-foreground">Room {getRoomNumber(booking.roomId)}</p>
+                      <p className="font-semibold text-foreground">{getRoomNumber(booking.roomId)}</p>
                     </div>
                     <div>
                       <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">

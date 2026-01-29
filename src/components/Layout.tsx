@@ -29,7 +29,7 @@ export default function Layout({ children }: LayoutProps) {
           <div className="flex items-center gap-3">
             <Bed className="h-8 w-8 text-sidebar-ring" />
             <div>
-              <h1 className="text-xl font-bold text-sidebar-foreground">HotelFlow</h1>
+              <h1 className="text-xl font-bold text-sidebar-foreground">DWBS HotelFlow</h1>
               <p className="text-xs text-sidebar-foreground/70">Management System</p>
             </div>
           </div>

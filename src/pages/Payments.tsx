@@ -306,7 +306,7 @@ export default function Payments() {
                         <DoorOpen className="h-4 w-4" />
                         <span>Room</span>
                       </div>
-                      <p className="font-semibold text-foreground">Room {getRoomNumber(payment.bookingId)}</p>
+                      <p className="font-semibold text-foreground">{getRoomNumber(payment.bookingId)}</p>
                     </div>
                     <div>
                       <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">

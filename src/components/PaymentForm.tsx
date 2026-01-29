@@ -134,7 +134,7 @@ export default function PaymentForm({ open, onOpenChange, booking, onPaymentAdde
               </div>
               <div>
                 <span className="text-muted-foreground">Room:</span>
-                <p className="font-medium">Room {roomNumber}</p>
+                <p className="font-medium">{roomNumber}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">Booking Total:</span>
