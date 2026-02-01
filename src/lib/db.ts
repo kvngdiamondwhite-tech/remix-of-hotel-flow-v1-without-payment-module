@@ -4,7 +4,7 @@ import { bookingWindowMs, MinimalSettings } from './dates';
 import { getSettings } from './settings';
 
 const DB_NAME = 'HotelManagementDB';
-const DB_VERSION = 1002;
+const DB_VERSION = 1003;
 
 export interface RoomType {
   id: string;
@@ -72,6 +72,20 @@ export interface Booking {
   endAtMs?: number;
   stayType?: 'overnight' | 'hourly';
   durationMinutes?: number;
+}
+
+// Multi-room booking support (backwards-compatible)
+export interface BookingRoom {
+  id: string;
+  bookingId: string;
+  roomId: string;
+  roomNumber: string;
+  roomTypeName: string;
+  priceAtBooking: number;
+  checkInDate: string;
+  checkOutDate: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Expenditure {
@@ -190,6 +204,14 @@ export async function initDB(): Promise<IDBDatabase> {
         const expendituresStore = db.createObjectStore('expenditures', { keyPath: 'id' });
         expendituresStore.createIndex('date', 'date', { unique: false });
         expendituresStore.createIndex('category', 'category', { unique: false });
+      }
+
+      // BookingRooms Store (Multi-room booking support)
+      if (!db.objectStoreNames.contains('bookingRooms')) {
+        const bookingRoomsStore = db.createObjectStore('bookingRooms', { keyPath: 'id' });
+        bookingRoomsStore.createIndex('bookingId', 'bookingId', { unique: false });
+        bookingRoomsStore.createIndex('roomId', 'roomId', { unique: false });
+        bookingRoomsStore.createIndex('checkInDate', 'checkInDate', { unique: false });
       }
     };
   });
@@ -360,5 +382,54 @@ export async function hasOverlappingBooking(
       const bEnd = new Date(b.checkOutDate).getTime();
       return newWindow.startAtMs < bEnd && newWindow.endAtMs > bStart;
     }
+  });
+}
+
+// Multi-room booking support functions
+export async function getBookingRoomsByBookingId(bookingId: string): Promise<BookingRoom[]> {
+  return withRetry(async () => {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['bookingRooms'], 'readonly');
+      const store = transaction.objectStore('bookingRooms');
+      const index = store.index('bookingId');
+      const request = index.getAll(bookingId);
+
+      transaction.onerror = () => {
+        dbInstance = null;
+        reject(transaction.error || new Error('Transaction failed'));
+      };
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  });
+}
+
+export async function deleteBookingRoomsByBookingId(bookingId: string): Promise<void> {
+  return withRetry(async () => {
+    const db = await initDB();
+    const rooms = await getBookingRoomsByBookingId(bookingId);
+    
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(['bookingRooms'], 'readwrite');
+      const store = transaction.objectStore('bookingRooms');
+      
+      rooms.forEach(room => {
+        store.delete(room.id);
+      });
+
+      transaction.onerror = () => {
+        dbInstance = null;
+        reject(transaction.error || new Error('Transaction failed'));
+      };
+      
+      transaction.onabort = () => {
+        dbInstance = null;
+        reject(new Error('Transaction aborted'));
+      };
+
+      transaction.oncomplete = () => resolve();
+    });
   });
 }

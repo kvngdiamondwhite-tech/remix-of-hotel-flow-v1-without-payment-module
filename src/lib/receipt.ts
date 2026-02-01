@@ -1,4 +1,4 @@
-import { Booking, Guest, Room, RoomType } from './db';
+import { Booking, Guest, Room, RoomType, BookingRoom } from './db';
 import { Payment, getTotalPaidForBooking } from './payments';
 import { formatDate, formatDateTime } from './dates';
 import { formatCurrency } from './calculations';
@@ -251,8 +251,9 @@ export function printReceipt(
 export async function generateInvoice(
   booking: Booking,
   guest: Guest,
-  room: Room,
-  roomType: RoomType
+  room: Room | null,
+  roomType: RoomType | null,
+  bookingRooms?: BookingRoom[]
 ): Promise<string> {
   const settings = getSettings();
   const footerHtml = settings.receiptFooter 
@@ -274,6 +275,39 @@ export async function generateInvoice(
     statusColor = '#3b82f6'; // blue
   }
   
+  // If bookingRooms provided, render breakdown table
+  const roomBreakdownHtml = bookingRooms && bookingRooms.length > 0 ? `
+    <div class="section">
+      <h2>Room Breakdown</h2>
+      <table style="width:100%; border-collapse: collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:6px; border-bottom:1px solid #eee">Room</th>
+            <th style="text-align:left; padding:6px; border-bottom:1px solid #eee">Type</th>
+            <th style="text-align:right; padding:6px; border-bottom:1px solid #eee">Rate/Night</th>
+            <th style="text-align:right; padding:6px; border-bottom:1px solid #eee">Nights</th>
+            <th style="text-align:right; padding:6px; border-bottom:1px solid #eee">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${bookingRooms.map(br => {
+            const nights = Math.max(1, Math.floor((new Date(br.checkOutDate).getTime() - new Date(br.checkInDate).getTime()) / (24*60*60*1000)));
+            const subtotal = (br.priceAtBooking || 0) * nights;
+            return `
+              <tr>
+                <td style="padding:6px; border-bottom:1px solid #f0f0f0">${br.roomNumber}</td>
+                <td style="padding:6px; border-bottom:1px solid #f0f0f0">${br.roomTypeName}</td>
+                <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right">${formatCurrency(br.priceAtBooking)}</td>
+                <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right">${nights}</td>
+                <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right">${formatCurrency(subtotal)}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  ` : '';
+
   return `
 <!DOCTYPE html>
 <html>
@@ -449,15 +483,19 @@ export async function generateInvoice(
 
   <div class="section">
     <h2>Room Details</h2>
-    <div class="row">
-      <span class="label">Room Number:</span>
-      <span class="value">${room.roomNumber}</span>
-    </div>
-    <div class="row">
-      <span class="label">Room Type:</span>
-      <span class="value">${roomType.name}</span>
-    </div>
+    ${room && roomType ? `
+      <div class="row">
+        <span class="label">Room Number:</span>
+        <span class="value">${room.roomNumber}</span>
+      </div>
+      <div class="row">
+        <span class="label">Room Type:</span>
+        <span class="value">${roomType.name}</span>
+      </div>
+    ` : ''}
   </div>
+
+  ${roomBreakdownHtml}
 
   <div class="financial-section">
     <h2>Financial Summary</h2>
@@ -528,10 +566,11 @@ export async function generateInvoice(
 export async function printInvoice(
   booking: Booking,
   guest: Guest,
-  room: Room,
-  roomType: RoomType
+  room: Room | null,
+  roomType: RoomType | null,
+  bookingRooms?: BookingRoom[]
 ) {
-  const invoiceHtml = await generateInvoice(booking, guest, room, roomType);
+  const invoiceHtml = await generateInvoice(booking, guest, room, roomType, bookingRooms);
   const printWindow = window.open('', '_blank');
   if (printWindow) {
     printWindow.document.write(invoiceHtml);
