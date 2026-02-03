@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { getAllItems, Booking, Guest, Room, RoomType, BookingRoom } from "@/lib/db";
+import { getAllItems, Booking, Guest, Room, RoomType } from "@/lib/db";
 import { getAllPayments, Payment } from "@/lib/payments";
 import { formatCurrency } from "@/lib/calculations";
 import { formatDate } from "@/lib/dates";
@@ -20,7 +20,6 @@ interface ReportData {
   guests: Guest[];
   rooms: Room[];
   roomTypes: RoomType[];
-  bookingRooms: BookingRoom[];
   payments: Payment[];
 }
 
@@ -31,7 +30,6 @@ export default function Reports() {
     guests: [],
     rooms: [],
     roomTypes: [],
-    bookingRooms: [],
     payments: [],
   });
   const [loading, setLoading] = useState(true);
@@ -51,15 +49,14 @@ export default function Reports() {
   async function loadData() {
     setLoading(true);
     try {
-      const [bookings, guests, rooms, roomTypes, bookingRooms, payments] = await Promise.all([
+      const [bookings, guests, rooms, roomTypes, payments] = await Promise.all([
         getAllItems<Booking>("bookings"),
         getAllItems<Guest>("guests"),
         getAllItems<Room>("rooms"),
         getAllItems<RoomType>("roomTypes"),
-        getAllItems<BookingRoom>("bookingRooms"),
         getAllPayments(),
       ]);
-      setData({ bookings, guests, rooms, roomTypes, bookingRooms, payments });
+      setData({ bookings, guests, rooms, roomTypes, payments });
     } catch (error) {
       console.error("Failed to load report data:", error);
     } finally {
@@ -184,8 +181,8 @@ export default function Reports() {
 
   // Daily Revenue Report
   function getDailyRevenue() {
-    const dateStart = startOfDay(parseISO(selectedDate));
-    const dateEnd = endOfDay(parseISO(selectedDate));
+    const dateStart = startOfDay(parseISO(dailyStartDate));
+    const dateEnd = endOfDay(parseISO(dailyEndDate));
 
     const dailyPayments = data.payments.filter((p) =>
       isWithinInterval(parseISO(p.paymentDate), { start: dateStart, end: dateEnd })
@@ -513,7 +510,7 @@ export default function Reports() {
                         const booking = data.bookings.find((b) => b.id === payment.bookingId);
                         return (
                           <TableRow key={payment.id}>
-                            <TableCell>{payment.paymentTime || '00:00'}</TableCell>
+                            <TableCell>{format(parseISO(payment.paymentDate), "HH:mm")}</TableCell>
                             <TableCell>{booking ? getGuestName(booking.guestId) : "Unknown"}</TableCell>
                             <TableCell>{getPaymentMethodName(payment.paymentMethod)}</TableCell>
                             <TableCell className="text-right font-medium">{formatCurrency(payment.amount)}</TableCell>

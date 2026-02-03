@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,13 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { getAllItems, addItem, updateItem, deleteItem, getItem, Booking, Guest, Room, RoomType, BookingRoom, hasOverlappingBooking, deleteBookingRoomsByBookingId, getBookingRoomsByBookingId, initDB } from "@/lib/db";
+import { getAllItems, addItem, updateItem, deleteItem, getItem, Booking, Guest, Room, RoomType, hasOverlappingBooking } from "@/lib/db";
 import { bookingWindowMs } from '@/lib/dates';
-import { getSettings, HotelSettings } from '@/lib/settings';
+import { getSettings } from '@/lib/settings';
 import { uid } from "@/lib/id";
-import { nowIso, todayIso, daysBetweenIso, formatDate, formatDateTime } from "@/lib/dates";
+import { nowIso, todayIso, daysBetweenIso, formatDate } from "@/lib/dates";
 import { calculateSubtotal, applyDiscount, applySurcharge, calculateTotal, formatCurrency, Discount, Surcharge } from "@/lib/calculations";
-import { Plus, Edit, Trash2, Calendar, User, DoorOpen, FileText, CreditCard, AlertCircle, X } from "lucide-react";
+import { Plus, Edit, Trash2, Calendar, User, DoorOpen, FileText, CreditCard, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { printInvoice } from "@/lib/receipt";
 import { getTotalPaidForBooking } from "@/lib/payments";
@@ -31,7 +31,6 @@ export default function Bookings() {
   const [guests, setGuests] = useState<Guest[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
-  const [bookingRooms, setBookingRooms] = useState<BookingRoom[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [paymentBooking, setPaymentBooking] = useState<Booking | null>(null);
@@ -41,42 +40,6 @@ export default function Bookings() {
   const [filterRoom, setFilterRoom] = useState<string>("all");
   const [filterStartDate, setFilterStartDate] = useState<string>("");
   const [filterEndDate, setFilterEndDate] = useState<string>("");
-  const [sortBy, setSortBy] = useState<'createdAt' | 'updatedAt'>('createdAt');
-  const [hotelSettings, setHotelSettings] = useState<HotelSettings | null>(null);
-  
-  // Multi-room support - room lines (per-room dates & price)
-  type RoomLine = {
-    tempId: string;
-    roomId: string;
-    checkInDate: string;
-    checkOutDate: string;
-    priceAtBooking: number;
-  };
-
-  const [roomLines, setRoomLines] = useState<RoomLine[]>([]);
-  
-  // Helper function to calculate default checkout date based on check-in time and checkout time from settings
-  const getDefaultCheckoutDate = (checkInDate: string): string => {
-    if (!hotelSettings) return checkInDate;
-    
-    try {
-      const checkInTime = hotelSettings.defaultCheckInTime || '14:00';
-      const checkOutTime = hotelSettings.defaultCheckOutTime || '11:00';
-      
-      // Compare times as strings (HH:MM format)
-      // If checkout is earlier or same as check-in, checkout is next day
-      if (checkOutTime <= checkInTime) {
-        const nextDay = new Date(checkInDate);
-        nextDay.setDate(nextDay.getDate() + 1);
-        return nextDay.toISOString().split('T')[0];
-      }
-      
-      return checkInDate;
-    } catch (error) {
-      return checkInDate;
-    }
-  };
-  
   const [formData, setFormData] = useState({
     guestId: "",
     roomId: "",
@@ -95,52 +58,24 @@ export default function Bookings() {
     durationMinutes: '',
   });
 
-  // Expand/collapse state for booking rows
-  const [expandedBookingIds, setExpandedBookingIds] = useState<Set<string>>(new Set());
-
-  const toggleExpanded = (bookingId: string) => {
-    setExpandedBookingIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(bookingId)) {
-        newSet.delete(bookingId);
-      } else {
-        newSet.add(bookingId);
-      }
-      return newSet;
-    });
-  };
-
   useEffect(() => {
     loadData();
-  }, []);
-
-  useEffect(() => {
-    const settings = getSettings();
-    setHotelSettings(settings);
-    
-    // Update default checkout date whenever settings change
-    setFormData(prev => ({
-      ...prev,
-      checkOutDate: getDefaultCheckoutDate(prev.checkInDate)
-    }));
   }, []);
 
   async function loadData() {
     // First, update room statuses based on checkout times
     await updateRoomStatusesBasedOnCheckout();
     
-    const [bookingsData, guestsData, roomsData, typesData, bookingRoomsData] = await Promise.all([
+    const [bookingsData, guestsData, roomsData, typesData] = await Promise.all([
       getAllItems<Booking>('bookings'),
       getAllItems<Guest>('guests'),
       getAllItems<Room>('rooms'),
-      getAllItems<RoomType>('roomTypes'),
-      getAllItems<BookingRoom>('bookingRooms')
+      getAllItems<RoomType>('roomTypes')
     ]);
     setBookings(bookingsData.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     setGuests(guestsData);
     setRooms(roomsData);
     setRoomTypes(typesData);
-    setBookingRooms(bookingRoomsData);
     
     // Load payment totals for each booking
     const paymentsMap: Record<string, number> = {};
@@ -151,14 +86,11 @@ export default function Bookings() {
   }
 
   function resetForm() {
-    const today = todayIso();
-    const defaultCheckout = getDefaultCheckoutDate(today);
-    
     setFormData({
       guestId: "",
       roomId: "",
-      checkInDate: today,
-      checkOutDate: defaultCheckout,
+      checkInDate: todayIso(),
+      checkOutDate: todayIso(),
       ratePerNight: "",
       discountType: "percentage",
       discountValue: "",
@@ -171,45 +103,10 @@ export default function Bookings() {
       durationMinutes: '',
     });
     setEditingBooking(null);
-    setRoomLines([]);
   }
 
-  async function handleEdit(booking: Booking) {
+  function handleEdit(booking: Booking) {
     setEditingBooking(booking);
-
-    // Hydrate room lines from bookingRooms if present (backward compatible)
-    try {
-      const brs = await getBookingRoomsByBookingId(booking.id);
-      if (brs && brs.length > 0) {
-        const lines = brs.map(br => ({
-          tempId: br.id,
-          roomId: br.roomId,
-          checkInDate: br.checkInDate,
-          checkOutDate: br.checkOutDate,
-          priceAtBooking: br.priceAtBooking,
-        }));
-        setRoomLines(lines);
-      } else {
-        // Legacy single-room booking
-        setRoomLines([{
-          tempId: 'primary',
-          roomId: booking.roomId,
-          checkInDate: booking.checkInDate,
-          checkOutDate: booking.checkOutDate,
-          priceAtBooking: booking.ratePerNight,
-        }]);
-      }
-    } catch (err) {
-      // Fallback to legacy single-room
-      setRoomLines([{
-        tempId: 'primary',
-        roomId: booking.roomId,
-        checkInDate: booking.checkInDate,
-        checkOutDate: booking.checkOutDate,
-        priceAtBooking: booking.ratePerNight,
-      }]);
-    }
-
     setFormData({
       guestId: booking.guestId,
       roomId: booking.roomId,
@@ -217,14 +114,14 @@ export default function Bookings() {
       checkOutDate: booking.checkOutDate,
       ratePerNight: booking.ratePerNight.toString(),
       discountType: booking.discount?.type || "percentage",
-      discountValue: booking.discount?.value?.toString() || "",
+      discountValue: booking.discount?.value.toString() || "",
       surchargeType: booking.surcharge?.type || "percentage",
-      surchargeValue: booking.surcharge?.value?.toString() || "",
+      surchargeValue: booking.surcharge?.value.toString() || "",
       paymentStatus: booking.paymentStatus,
       notes: booking.notes,
       isHourly: booking.stayType === 'hourly',
       startDateTime: booking.startAtMs ? new Date(booking.startAtMs).toISOString().slice(0,16) : '',
-      durationMinutes: booking.durationMinutes ? String(booking.durationMinutes) : '',
+      durationMinutes: (booking as any).durationMinutes ? String((booking as any).durationMinutes) : '',
     });
     setIsDialogOpen(true);
   }
@@ -247,60 +144,19 @@ export default function Bookings() {
     if (room) {
       const roomType = roomTypes.find(rt => rt.id === room.roomTypeId);
       if (roomType) {
-        const newCheckoutDate = getDefaultCheckoutDate(formData.checkInDate);
-        
         setFormData({
           ...formData,
           roomId,
           ratePerNight: roomType.basePrice.toString(),
-          checkOutDate: newCheckoutDate,
-        });
-
-        // Ensure primary room line exists/updated (primary line uses tempId 'primary')
-        setRoomLines(prev => {
-          const others = prev.filter(l => l.tempId !== 'primary');
-          const primaryLine: RoomLine = {
-            tempId: 'primary',
-            roomId,
-            checkInDate: formData.checkInDate,
-            checkOutDate: newCheckoutDate,
-            priceAtBooking: roomType.basePrice,
-          };
-          return [primaryLine, ...others];
         });
       }
     }
   }
 
-  // Get all selected rooms with their prices
-  function getSelectedRoomsWithPrices() {
-    // Use roomLines as the source of truth; fallback to virtual primary line
-    const lines: RoomLine[] = roomLines.length > 0 ? roomLines : (formData.roomId ? [{ tempId: 'primary', roomId: formData.roomId, checkInDate: formData.checkInDate, checkOutDate: formData.checkOutDate, priceAtBooking: parseFloat(formData.ratePerNight) || 0 }] as RoomLine[] : [] as RoomLine[]);
-    return lines.map((line: RoomLine) => {
-      const room = rooms.find(r => r.id === line.roomId);
-      const roomType = roomTypes.find(rt => rt.id === room?.roomTypeId);
-      return {
-        roomId: line.roomId,
-        roomNumber: room?.roomNumber || 'Unknown',
-        roomType: roomType?.name || 'Unknown',
-        price: line.priceAtBooking || 0,
-        checkInDate: line.checkInDate,
-        checkOutDate: line.checkOutDate,
-      };
-    });
-  }
-
-  // Calculate booking summary with multi-room support (per-line nights & subtotals)
   function calculateBookingSummary() {
-    const selected = getSelectedRoomsWithPrices();
-
-    // For each room line, compute nights and subtotal using its own dates
-    const roomSubtotals: number[] = selected.map(r => {
-      const nights = daysBetweenIso(r.checkInDate, r.checkOutDate);
-      return (r.price || 0) * nights;
-    });
-
-    const subtotal = roomSubtotals.reduce((sum, amt) => sum + amt, 0);
+    const nights = daysBetweenIso(formData.checkInDate, formData.checkOutDate);
+    const rate = parseFloat(formData.ratePerNight) || 0;
+    const subtotal = calculateSubtotal(rate, nights);
 
     const discount: Discount | null = formData.discountValue
       ? { type: formData.discountType, value: parseFloat(formData.discountValue) || 0 }
@@ -314,29 +170,7 @@ export default function Bookings() {
 
     const total = calculateTotal(subtotal, discountAmt, surchargeAmt);
 
-    // booking-level nights for display/search is min..max of line dates
-    const allLines: RoomLine[] = roomLines.length > 0 ? roomLines : (formData.roomId ? [{ tempId: 'primary', roomId: formData.roomId, checkInDate: formData.checkInDate, checkOutDate: formData.checkOutDate, priceAtBooking: parseFloat(formData.ratePerNight) || 0 }] as RoomLine[] : [] as RoomLine[]);
-    let minStart = formData.checkInDate;
-    let maxEnd = formData.checkOutDate;
-    if (allLines.length > 0) {
-      minStart = allLines.reduce((min, l) => l.checkInDate < min ? l.checkInDate : min, allLines[0].checkInDate);
-      maxEnd = allLines.reduce((max, l) => l.checkOutDate > max ? l.checkOutDate : max, allLines[0].checkOutDate);
-    }
-    const displayNights = daysBetweenIso(minStart, maxEnd);
-
-    return {
-      nights: displayNights,
-      rate: parseFloat(formData.ratePerNight) || 0,
-      roomCount: selected.length,
-      selectedRooms: selected,
-      roomSubtotals,
-      subtotal,
-      discountAmt,
-      surchargeAmt,
-      total,
-      discount,
-      surcharge,
-    };
+    return { nights, rate, subtotal, discountAmt, surchargeAmt, total, discount, surcharge };
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -359,292 +193,157 @@ export default function Bookings() {
       return;
     }
 
-    // Ensure at least one room line exists (primary must be selected)
-    if (!formData.roomId && roomLines.length === 0) {
+    if (!formData.roomId) {
       toast.error("Please select a room");
       return;
     }
 
-    // For hourly/short-stay bookings, validate differently
-    if (formData.isHourly) {
-      if (!formData.startDateTime) {
-        toast.error("Please select a start time for short stay booking");
-        return;
-      }
-      if (!formData.durationMinutes) {
-        toast.error("Please enter duration in minutes for short stay booking");
-        return;
-      }
-      
-      const duration = parseInt(formData.durationMinutes, 10);
-      if (isNaN(duration) || duration < 1) {
-        toast.error("Duration must be at least 1 minute");
-        return;
-      }
-    } else {
-      // For overnight bookings, validate dates
-      // Build room lines to validate (use roomLines or virtual primary)
-      const linesToBook = roomLines.length > 0
-        ? roomLines
-        : [{ tempId: 'primary', roomId: formData.roomId, checkInDate: formData.checkInDate, checkOutDate: formData.checkOutDate, priceAtBooking: parseFloat(formData.ratePerNight) || 0 }];
-
-      // Basic validation per line
-      const seenRoomIds = new Set<string>();
-      for (const line of linesToBook) {
-        if (!line.roomId) {
-          toast.error('Each room line must have a room selected');
-          return;
-        }
-        if (new Date(line.checkOutDate) <= new Date(line.checkInDate)) {
-          const rn = getRoomNumber(line.roomId);
-          toast.error(`Check-out must be after check-in for room ${rn}`);
-          return;
-        }
-        if (seenRoomIds.has(line.roomId)) {
-          const rn = getRoomNumber(line.roomId);
-          toast.error(`Room ${rn} is selected multiple times`);
-          return;
-        }
-        seenRoomIds.add(line.roomId);
-      }
+    if (new Date(formData.checkOutDate) < new Date(formData.checkInDate)) {
+      toast.error("Check-out date must be after check-in date");
+      return;
     }
-
-    // Build room lines (use roomLines or virtual primary)
-    const linesToBook = roomLines.length > 0
-      ? roomLines
-      : [{ tempId: 'primary', roomId: formData.roomId, checkInDate: formData.checkInDate, checkOutDate: formData.checkOutDate, priceAtBooking: parseFloat(formData.ratePerNight) || 0 }];
 
     const rate = parseFloat(formData.ratePerNight);
     if (isNaN(rate) || rate < 0) {
-      // Keep default rate validation, but totals will be computed from room lines
       toast.error("Valid rate per night is required");
       return;
     }
 
-    // Overlap validation: check bookingRooms and legacy bookings
-    const allBookings = await getAllItems<Booking>('bookings');
-    const allBookingRooms = await getAllItems<BookingRoom>('bookingRooms');
+    // Check for overlapping bookings
+    if (formData.isHourly) {
+      // Build candidate window
+      const settings = getSettings();
+      const startAtMs = formData.startDateTime ? new Date(formData.startDateTime).getTime() : Date.now();
+      const duration = parseInt(formData.durationMinutes || '', 10) || 120; // minutes
+      const endAtMs = startAtMs + Math.round(duration * 60000);
 
-    for (const line of linesToBook) {
-      if (formData.isHourly) {
-        const settings = getSettings();
-        const startAtMs = formData.startDateTime ? new Date(formData.startDateTime).getTime() : Date.now();
-        const duration = parseInt(formData.durationMinutes || '', 10) || 120;
-        const endAtMs = startAtMs + Math.round(duration * 60000);
+      if (endAtMs <= startAtMs) {
+        toast.error('Invalid duration for hourly booking');
+        return;
+      }
 
-        if (endAtMs <= startAtMs) {
-          toast.error('Invalid duration for hourly booking');
-          return;
-        }
-
-        for (const b of allBookings) {
-          if (b.id === editingBooking?.id) continue;
-          const usesRoomLegacy = b.roomId === line.roomId;
-          const usesRoomViaRooms = allBookingRooms.some(br => br.bookingId === b.id && br.roomId === line.roomId);
-          if (!usesRoomLegacy && !usesRoomViaRooms) continue;
-          try {
-            const maybe = b as unknown as { startAtMs?: number; endAtMs?: number; stayType?: 'overnight'|'hourly' };
-            const bw = bookingWindowMs({ startAtMs: maybe.startAtMs, endAtMs: maybe.endAtMs, checkInDate: b.checkInDate, checkOutDate: b.checkOutDate, stayType: maybe.stayType }, settings);
-            if (startAtMs < bw.endAtMs && endAtMs > bw.startAtMs) {
-              const roomNum = getRoomNumber(line.roomId);
-              const from = new Date(bw.startAtMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-              const to = new Date(bw.endAtMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-              toast.error(`Room ${roomNum} already has a booking from ${from}–${to}.`);
-              return;
-            }
-          } catch (err) {
-            const bStart = new Date(b.checkInDate).getTime();
-            const bEnd = new Date(b.checkOutDate).getTime();
-            if (startAtMs < bEnd && endAtMs > bStart) {
-              toast.error('This room already has a booking that overlaps the selected time');
-              return;
-            }
-          }
-        }
-      } else {
-        // Overnight: check bookingRooms entries first
-        const newStart = new Date(line.checkInDate).getTime();
-        const newEnd = new Date(line.checkOutDate).getTime();
-
-        for (const br of allBookingRooms) {
-          if (br.bookingId === editingBooking?.id) continue;
-          if (br.roomId !== line.roomId) continue;
-          const bStart = new Date(br.checkInDate).getTime();
-          const bEnd = new Date(br.checkOutDate).getTime();
-          if (newStart < bEnd && newEnd > bStart) {
-            const roomNum = getRoomNumber(line.roomId);
-            toast.error(`${roomNum} is already booked for the selected dates`);
+      // Check overlap against existing bookings for the same room
+      const allBookings = await getAllItems<Booking>('bookings');
+      for (const b of allBookings) {
+        if (b.id === editingBooking?.id) continue;
+        if (b.roomId !== formData.roomId) continue;
+        try {
+          const maybe = b as unknown as { startAtMs?: number; endAtMs?: number; stayType?: 'overnight'|'hourly' };
+          const bw = bookingWindowMs({ startAtMs: maybe.startAtMs, endAtMs: maybe.endAtMs, checkInDate: b.checkInDate, checkOutDate: b.checkOutDate, stayType: maybe.stayType }, settings);
+          if (startAtMs < bw.endAtMs && endAtMs > bw.startAtMs) {
+            const roomNum = getRoomNumber(formData.roomId);
+            const from = new Date(bw.startAtMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const to = new Date(bw.endAtMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            toast.error(`Room ${roomNum} already has a booking from ${from}–${to}.`);
             return;
           }
-        }
-
-        for (const b of allBookings) {
-          if (b.id === editingBooking?.id) continue;
-          if (b.roomId !== line.roomId) continue;
+        } catch (err) {
+          // fallback to date-only check
           const bStart = new Date(b.checkInDate).getTime();
           const bEnd = new Date(b.checkOutDate).getTime();
-          if (newStart < bEnd && newEnd > bStart) {
-            const roomNum = getRoomNumber(line.roomId);
-            toast.error(`${roomNum} is already booked for the selected dates`);
+          if (startAtMs < bEnd && endAtMs > bStart) {
+            toast.error('This room already has a booking that overlaps the selected time');
             return;
           }
         }
+      }
+    } else {
+      const hasOverlap = await hasOverlappingBooking(
+        formData.roomId,
+        formData.checkInDate,
+        formData.checkOutDate,
+        editingBooking?.id
+      );
+
+      if (hasOverlap) {
+        toast.error("This room is already booked for the selected dates");
+        return;
       }
     }
 
     try {
       const summary = calculateBookingSummary();
+      const room = rooms.find(r => r.id === formData.roomId);
 
-      // Build linesToBook again for persistence
-      const linesToBook = roomLines.length > 0
-        ? roomLines
-        : [{ tempId: 'primary', roomId: formData.roomId, checkInDate: formData.checkInDate, checkOutDate: formData.checkOutDate, priceAtBooking: parseFloat(formData.ratePerNight) || 0 }];
+      if (editingBooking) {
+        const updated: Booking = {
+          ...editingBooking,
+          guestId: formData.guestId,
+          roomId: formData.roomId,
+          roomTypeId: room!.roomTypeId,
+          checkInDate: formData.checkInDate,
+          checkOutDate: formData.checkOutDate,
+          nights: summary.nights,
+          ratePerNight: summary.rate,
+          subtotal: summary.subtotal,
+          discount: summary.discount,
+          discountAmount: summary.discountAmt,
+          surcharge: summary.surcharge,
+          surchargeAmount: summary.surchargeAmt,
+          total: summary.total,
+          paymentStatus: formData.paymentStatus,
+          notes: formData.notes.trim(),
+          updatedAt: nowIso(),
+        } as Booking;
 
-      // Determine booking-level dates (min start, max end)
-      const minStart = linesToBook.reduce((min, l) => l.checkInDate < min ? l.checkInDate : min, linesToBook[0].checkInDate);
-      const maxEnd = linesToBook.reduce((max, l) => l.checkOutDate > max ? l.checkOutDate : max, linesToBook[0].checkOutDate);
-      const displayNights = daysBetweenIso(minStart, maxEnd);
-
-      const db = await initDB();
-
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(['bookings', 'bookingRooms'], 'readwrite');
-        const bookingsStore = tx.objectStore('bookings');
-        const bookingRoomsStore = tx.objectStore('bookingRooms');
-
-        tx.onerror = () => reject(tx.error);
-        tx.onabort = () => reject(tx.error);
-        tx.oncomplete = () => resolve();
-
-        if (editingBooking) {
-          const room = rooms.find(r => r.id === formData.roomId);
-          const updated: Booking = {
-            ...editingBooking,
-            guestId: formData.guestId,
-            roomId: formData.roomId,
-            roomTypeId: room!.roomTypeId,
-            checkInDate: minStart,
-            checkOutDate: maxEnd,
-            nights: displayNights,
-            ratePerNight: parseFloat(formData.ratePerNight) || 0,
-            subtotal: summary.subtotal,
-            discount: summary.discount,
-            discountAmount: summary.discountAmt,
-            surcharge: summary.surcharge,
-            surchargeAmount: summary.surchargeAmt,
-            total: summary.total,
-            paymentStatus: formData.paymentStatus,
-            notes: formData.notes.trim(),
-            updatedAt: nowIso(),
-          } as Booking;
-
-          if (formData.isHourly) {
-            const startAtMs = formData.startDateTime ? new Date(formData.startDateTime).getTime() : Date.now();
-            const duration = parseInt(formData.durationMinutes || '', 10) || 120;
-            updated.stayType = 'hourly';
-            updated.startAtMs = startAtMs;
-            updated.endAtMs = startAtMs + Math.round(duration * 60000);
-            updated.durationMinutes = duration;
-          } else {
-            updated.stayType = 'overnight';
-          }
-
-          const putReq = bookingsStore.put(updated);
-          putReq.onerror = () => reject(putReq.error);
-          putReq.onsuccess = () => {
-            // Remove existing bookingRooms for this booking within same transaction
-            const idxReq = bookingRoomsStore.index('bookingId').getAll(editingBooking.id);
-            idxReq.onerror = () => reject(idxReq.error);
-            idxReq.onsuccess = () => {
-              const existing: BookingRoom[] = idxReq.result || [];
-                existing.forEach(er => bookingRoomsStore.delete(er.id));
-
-              // Add new bookingRooms
-              for (const line of linesToBook) {
-                const selectedRoom = rooms.find(r => r.id === line.roomId);
-                if (selectedRoom) {
-                  const roomType = roomTypes.find(rt => rt.id === selectedRoom.roomTypeId);
-                  const bookingRoom: BookingRoom = {
-                    id: uid(),
-                    bookingId: editingBooking.id,
-                    roomId: selectedRoom.id,
-                    roomNumber: selectedRoom.roomNumber,
-                    roomTypeName: roomType?.name || 'Unknown',
-                    priceAtBooking: line.priceAtBooking,
-                    checkInDate: line.checkInDate,
-                    checkOutDate: line.checkOutDate,
-                    createdAt: nowIso(),
-                    updatedAt: nowIso(),
-                  };
-                  bookingRoomsStore.add(bookingRoom);
-                }
-              }
-            };
-          };
+        // If hourly, set explicit time fields
+        if (formData.isHourly) {
+          const startAtMs = formData.startDateTime ? new Date(formData.startDateTime).getTime() : Date.now();
+          const duration = parseInt(formData.durationMinutes || '', 10) || 120;
+          (updated as any).stayType = 'hourly';
+          (updated as any).startAtMs = startAtMs;
+          (updated as any).endAtMs = startAtMs + Math.round(duration * 60000);
+          (updated as any).durationMinutes = duration;
         } else {
-          // Create new booking and bookingRooms in single transaction
-          const newBooking: Booking = {
-            id: uid(),
-            guestId: formData.guestId,
-            roomId: formData.roomId,
-            roomTypeId: (rooms.find(r => r.id === formData.roomId)?.roomTypeId) || '',
-            checkInDate: minStart,
-            checkOutDate: maxEnd,
-            nights: displayNights,
-            ratePerNight: parseFloat(formData.ratePerNight) || 0,
-            subtotal: summary.subtotal,
-            discount: summary.discount,
-            discountAmount: summary.discountAmt,
-            surcharge: summary.surcharge,
-            surchargeAmount: summary.surchargeAmt,
-            total: summary.total,
-            paymentStatus: formData.paymentStatus,
-            notes: formData.notes.trim(),
-            createdAt: nowIso(),
-            updatedAt: nowIso(),
-          } as Booking;
-
-          if (formData.isHourly) {
-            const startAtMs = formData.startDateTime ? new Date(formData.startDateTime).getTime() : Date.now();
-            const duration = parseInt(formData.durationMinutes || '', 10) || 120;
-            newBooking.stayType = 'hourly';
-            newBooking.startAtMs = startAtMs;
-            newBooking.endAtMs = startAtMs + Math.round(duration * 60000);
-            newBooking.durationMinutes = duration;
-          } else {
-            newBooking.stayType = 'overnight';
-          }
-
-          const addReq = bookingsStore.add(newBooking);
-          addReq.onerror = () => reject(addReq.error);
-          addReq.onsuccess = () => {
-            const createdId = addReq.result as string;
-            for (const line of linesToBook) {
-              const selectedRoom = rooms.find(r => r.id === line.roomId);
-              if (selectedRoom) {
-                const roomType = roomTypes.find(rt => rt.id === selectedRoom.roomTypeId);
-                const bookingRoom: BookingRoom = {
-                  id: uid(),
-                  bookingId: createdId,
-                  roomId: selectedRoom.id,
-                  roomNumber: selectedRoom.roomNumber,
-                  roomTypeName: roomType?.name || 'Unknown',
-                  priceAtBooking: line.priceAtBooking,
-                  checkInDate: line.checkInDate,
-                  checkOutDate: line.checkOutDate,
-                  createdAt: nowIso(),
-                  updatedAt: nowIso(),
-                };
-                bookingRoomsStore.add(bookingRoom);
-              }
-            }
-          };
+          (updated as any).stayType = 'overnight';
         }
-      });
+        await updateItem('bookings', updated);
+        toast.success("Booking updated successfully");
+      } else {
+        const newBooking: Booking = {
+          id: uid(),
+          guestId: formData.guestId,
+          roomId: formData.roomId,
+          roomTypeId: room!.roomTypeId,
+          checkInDate: formData.checkInDate,
+          checkOutDate: formData.checkOutDate,
+          nights: summary.nights,
+          ratePerNight: summary.rate,
+          subtotal: summary.subtotal,
+          discount: summary.discount,
+          discountAmount: summary.discountAmt,
+          surcharge: summary.surcharge,
+          surchargeAmount: summary.surchargeAmt,
+          total: summary.total,
+          paymentStatus: formData.paymentStatus,
+          notes: formData.notes.trim(),
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        } as Booking;
 
-      toast.success(editingBooking ? "Booking updated successfully" : "Booking created successfully");
+        if (formData.isHourly) {
+          const startAtMs = formData.startDateTime ? new Date(formData.startDateTime).getTime() : Date.now();
+          const duration = parseInt(formData.durationMinutes || '', 10) || 120;
+          (newBooking as any).stayType = 'hourly';
+          (newBooking as any).startAtMs = startAtMs;
+          (newBooking as any).endAtMs = startAtMs + Math.round(duration * 60000);
+          (newBooking as any).durationMinutes = duration;
+        } else {
+          (newBooking as any).stayType = 'overnight';
+        }
+        await addItem('bookings', newBooking);
+        
+        // Update room status to Occupied for new bookings
+        const roomToUpdate = room as Room;
+        await updateItem('rooms', {
+          ...roomToUpdate,
+          status: 'Occupied' as const,
+        });
+        
+        toast.success("Booking created successfully");
+      }
 
-      // Refresh room statuses to ensure consistency (do not manually set status here)
+      // Refresh room statuses to ensure consistency
       await updateRoomStatusesBasedOnCheckout();
       await loadData();
       setIsDialogOpen(false);
@@ -659,8 +358,6 @@ export default function Bookings() {
     if (!confirm("Are you sure you want to delete this booking?")) return;
 
     try {
-      // Delete booking and associated BookingRoom records
-      await deleteBookingRoomsByBookingId(id);
       await deleteItem('bookings', id);
       toast.success("Booking deleted successfully");
       
@@ -673,100 +370,29 @@ export default function Bookings() {
     }
   }
 
-  const getGuestName = useCallback((guestId: string): string => {
+  function getGuestName(guestId: string): string {
     return guests.find(g => g.id === guestId)?.fullName || "Unknown";
-  }, [guests]);
+  }
 
-  const getRoomNumber = useCallback((roomId: string): string => {
+  function getRoomNumber(roomId: string): string {
     return rooms.find(r => r.id === roomId)?.roomNumber || "Unknown";
-  }, [rooms]);
-
-  // Get all rooms for a booking (multi-room support)
-  const getBookingRoomsForDisplay = useCallback((bookingId: string): BookingRoom[] => {
-    const bookingRoomRecords = bookingRooms.filter(br => br.bookingId === bookingId);
-    
-    // If we have BookingRoom records, use them
-    if (bookingRoomRecords.length > 0) {
-      return bookingRoomRecords;
-    }
-    
-    // Fallback: create virtual BookingRoom from booking.roomId for backward compatibility
-    const booking = bookings.find(b => b.id === bookingId);
-    if (booking) {
-      const room = rooms.find(r => r.id === booking.roomId);
-      const roomType = roomTypes.find(rt => rt.id === room?.roomTypeId);
-      return [{
-        id: `virtual-${bookingId}-${booking.roomId}`,
-        bookingId: bookingId,
-        roomId: booking.roomId,
-        roomNumber: room?.roomNumber || 'Unknown',
-        roomTypeName: roomType?.name || 'Unknown',
-        priceAtBooking: booking.ratePerNight,
-        checkInDate: booking.checkInDate,
-        checkOutDate: booking.checkOutDate,
-        createdAt: booking.createdAt,
-        updatedAt: booking.updatedAt,
-      }];
-    }
-    
-    return [];
-  }, [bookingRooms, bookings, rooms, roomTypes]);
-
-  // Build memoized map of bookingRooms by bookingId for efficient lookup
-  const bookingRoomsByBookingId = useMemo(() => {
-    const map = new Map<string, BookingRoom[]>();
-    
-    // Add all BookingRoom records grouped by bookingId
-    for (const br of bookingRooms) {
-      const arr = map.get(br.bookingId) ?? [];
-      arr.push(br);
-      map.set(br.bookingId, arr);
-    }
-    
-    // Add fallback for legacy bookings without BookingRoom records
-    for (const booking of bookings) {
-      if (!map.has(booking.id)) {
-        const room = rooms.find(r => r.id === booking.roomId);
-        const roomType = roomTypes.find(rt => rt.id === room?.roomTypeId);
-        if (room) {
-          map.set(booking.id, [{
-            id: `virtual-${booking.id}-${booking.roomId}`,
-            bookingId: booking.id,
-            roomId: booking.roomId,
-            roomNumber: room.roomNumber,
-            roomTypeName: roomType?.name || 'Unknown',
-            priceAtBooking: booking.ratePerNight,
-            checkInDate: booking.checkInDate,
-            checkOutDate: booking.checkOutDate,
-            createdAt: booking.createdAt,
-            updatedAt: booking.updatedAt,
-          }]);
-        }
-      }
-    }
-    
-    return map;
-  }, [bookingRooms, bookings, rooms, roomTypes]);
+  }
 
   // Filter and search bookings based on search term, room, and date range
   const filteredBookings = useMemo(() => {
-    // First apply filters (search, room, date range)
-    const results = bookings.filter(booking => {
+    return bookings.filter(booking => {
       const guestName = getGuestName(booking.guestId).toLowerCase();
+      const roomNumber = getRoomNumber(booking.roomId).toLowerCase();
       const searchLower = searchTerm.toLowerCase();
-
-      // Rooms for this booking (handles bookingRooms and legacy fallback)
-      const bookingRoomsList = getBookingRoomsForDisplay(booking.id);
-      const roomNumbers = bookingRoomsList.map(br => (getRoomNumber(br.roomId) || br.roomNumber || '').toLowerCase());
-
-      // Search filter (guest name or any room number)
-      const matchesSearch = searchTerm === "" ||
-        guestName.includes(searchLower) ||
-        roomNumbers.some(rn => rn.includes(searchLower));
-
-      // Room filter: match if any room in booking matches the filterRoom id
-      const matchesRoom = filterRoom === "all" || booking.roomId === filterRoom || bookingRoomsList.some(br => br.roomId === filterRoom);
-
+      
+      // Search filter (guest name or room number)
+      const matchesSearch = searchTerm === "" || 
+        guestName.includes(searchLower) || 
+        roomNumber.includes(searchLower);
+      
+      // Room filter
+      const matchesRoom = filterRoom === "all" || booking.roomId === filterRoom;
+      
       // Date range filter (check-in and check-out dates overlap with filter range)
       let matchesDateRange = true;
       if (filterStartDate || filterEndDate) {
@@ -774,32 +400,14 @@ export default function Bookings() {
         const bookingEnd = new Date(booking.checkOutDate);
         const filterStart = filterStartDate ? new Date(filterStartDate) : new Date('1900-01-01');
         const filterEnd = filterEndDate ? new Date(filterEndDate) : new Date('2100-12-31');
-
+        
         // Check if booking dates overlap with filter dates
         matchesDateRange = bookingStart <= filterEnd && bookingEnd >= filterStart;
       }
-
+      
       return matchesSearch && matchesRoom && matchesDateRange;
     });
-
-    // Then apply sorting to the filtered results (do not mutate original)
-    const sorted = results.slice();
-    if (sortBy === 'createdAt') {
-      sorted.sort((a, b) => {
-        const ta = new Date(a.createdAt).getTime() || 0;
-        const tb = new Date(b.createdAt).getTime() || 0;
-        return tb - ta; // newest first
-      });
-    } else if (sortBy === 'updatedAt') {
-      sorted.sort((a, b) => {
-        const ta = new Date(a.updatedAt || a.createdAt).getTime() || 0;
-        const tb = new Date(b.updatedAt || b.createdAt).getTime() || 0;
-        return tb - ta; // newest first
-      });
-    }
-
-    return sorted;
-  }, [bookings, searchTerm, filterRoom, filterStartDate, filterEndDate, getBookingRoomsForDisplay, getGuestName, getRoomNumber, sortBy]);
+  }, [bookings, searchTerm, filterRoom, filterStartDate, filterEndDate]);
 
   const summary = calculateBookingSummary();
 
@@ -877,122 +485,28 @@ export default function Bookings() {
                   </Select>
                 </div>
 
-                {/* Multi-room support: manage room lines */}
-                <div className="col-span-2">
-                  <div className="flex items-center justify-between mb-2">
-                    <Label>Additional Rooms (Optional)</Label>
-                    <Select
-                      value=""
-                      onValueChange={(roomId) => {
-                        if (!roomLines.some(l => l.roomId === roomId)) {
-                          const room = rooms.find(r => r.id === roomId);
-                          const roomType = roomTypes.find(rt => rt.id === room?.roomTypeId);
-                          const newLine = {
-                            tempId: uid(),
-                            roomId,
-                            checkInDate: formData.checkInDate,
-                            checkOutDate: formData.checkOutDate,
-                            priceAtBooking: roomType?.basePrice || parseFloat(formData.ratePerNight) || 0,
-                          };
-                          setRoomLines(prev => [...prev, newLine]);
-                        }
-                      }}
-                    >
-                      <SelectTrigger className="w-auto">
-                        <SelectValue placeholder="+ Add Room" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {naturalSort(
-                          rooms.filter(r => r.status === 'Available' && r.id !== formData.roomId && !roomLines.some(l => l.roomId === r.id)),
-                          r => r.roomNumber
-                        ).map((room) => {
-                          const roomType = roomTypes.find(rt => rt.id === room.roomTypeId);
-                          return (
-                            <SelectItem key={room.id} value={room.id}>
-                              {room.roomNumber} - {roomType?.name}
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {roomLines.length > 0 ? (
-                    <div className="space-y-2 bg-muted p-3 rounded-md">
-                      {roomLines.map(line => {
-                        const selectedRoom = rooms.find(r => r.id === line.roomId);
-                        const roomType = roomTypes.find(rt => rt.id === selectedRoom?.roomTypeId);
-                        return (
-                          <div key={line.tempId} className="flex items-center justify-between bg-background p-2 rounded border gap-2">
-                            <div className="flex-1">
-                              <div className="text-sm font-medium">{selectedRoom?.roomNumber} - {roomType?.name}</div>
-                              <div className="flex gap-2 mt-1">
-                                <div>
-                                  <div className="text-xs text-muted-foreground">Check-in</div>
-                                  <Input type="date" value={line.checkInDate} onChange={(e) => setRoomLines(prev => prev.map(l => l.tempId === line.tempId ? { ...l, checkInDate: e.target.value } : l))} />
-                                </div>
-                                <div>
-                                  <div className="text-xs text-muted-foreground">Check-out</div>
-                                  <Input type="date" value={line.checkOutDate} onChange={(e) => setRoomLines(prev => prev.map(l => l.tempId === line.tempId ? { ...l, checkOutDate: e.target.value } : l))} />
-                                </div>
-                                <div className="ml-2">
-                                  <div className="text-xs text-muted-foreground">Rate</div>
-                                  <div className="font-semibold">{formatCurrency(line.priceAtBooking)}/night</div>
-                                </div>
-                              </div>
-                            </div>
-                            <div>
-                              <Button type="button" variant="ghost" size="sm" onClick={() => setRoomLines(prev => prev.filter(l => l.tempId !== line.tempId))}>
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">No additional rooms selected. Primary room will be used.</p>
-                  )}
+                <div>
+                  <Label htmlFor="checkIn">Check-in Date *</Label>
+                  <Input
+                    id="checkIn"
+                    type="date"
+                    value={formData.checkInDate}
+                    onChange={(e) => setFormData({ ...formData, checkInDate: e.target.value })}
+                    required
+                  />
                 </div>
 
-                {/* Date Range - Only show for overnight bookings */}
-                {!formData.isHourly && (
-                  <>
-                    <div>
-                      <Label htmlFor="checkIn">Check-in Date *</Label>
-                      <Input
-                        id="checkIn"
-                        type="date"
-                        value={formData.checkInDate}
-                        onChange={(e) => {
-                          const newCheckInDate = e.target.value;
-                          const newCheckOutDate = getDefaultCheckoutDate(newCheckInDate);
-                          setFormData({ ...formData, checkInDate: newCheckInDate, checkOutDate: newCheckOutDate });
-                          
-                          // Update room lines
-                          setRoomLines(prev => prev.map(line => ({
-                            ...line,
-                            checkInDate: newCheckInDate,
-                            checkOutDate: newCheckOutDate
-                          })));
-                        }}
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="checkOut">Check-out Date *</Label>
-                      <Input
-                        id="checkOut"
-                        type="date"
-                        value={formData.checkOutDate}
-                        min={formData.checkInDate}
-                        onChange={(e) => setFormData({ ...formData, checkOutDate: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </>
-                )}
+                <div>
+                  <Label htmlFor="checkOut">Check-out Date *</Label>
+                  <Input
+                    id="checkOut"
+                    type="date"
+                    value={formData.checkOutDate}
+                    min={formData.checkInDate}
+                    onChange={(e) => setFormData({ ...formData, checkOutDate: e.target.value })}
+                    required
+                  />
+                </div>
 
                 <div className="col-span-2 flex items-center gap-3">
                   <input
@@ -1004,7 +518,6 @@ export default function Bookings() {
                   <Label htmlFor="isHourly">Short stay / Hourly booking</Label>
                 </div>
 
-                {/* Short Stay Options - Only show when isHourly is true */}
                 {formData.isHourly && (
                   <>
                     <div>
@@ -1141,69 +654,40 @@ export default function Bookings() {
                 </div>
               </div>
 
-              {/* Summary Card with Room Breakdown */}
+              {/* Summary Card */}
               <Card className="bg-muted">
                 <CardHeader>
                   <CardTitle>Booking Summary</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Room Breakdown Table */}
-                  {summary.selectedRooms && summary.selectedRooms.length > 0 && (
-                    <div className="border rounded-lg overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead className="bg-background border-b">
-                          <tr>
-                            <th className="text-left p-2 font-semibold">Room</th>
-                            <th className="text-left p-2 font-semibold">Type</th>
-                            <th className="text-right p-2 font-semibold">Rate/Night</th>
-                            <th className="text-right p-2 font-semibold">Nights</th>
-                            <th className="text-right p-2 font-semibold">Subtotal</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {summary.selectedRooms.map((room, idx) => (
-                            <tr key={room.roomId} className={idx % 2 === 0 ? 'bg-background/50' : ''}>
-                              <td className="p-2 font-medium">{room.roomNumber}</td>
-                              <td className="p-2">{room.roomType}</td>
-                              <td className="text-right p-2">{formatCurrency(room.price)}</td>
-                              <td className="text-right p-2">{daysBetweenIso(room.checkInDate, room.checkOutDate)}</td>
-                              <td className="text-right p-2 font-semibold">{formatCurrency(summary.roomSubtotals[idx] || 0)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {/* Total Calculation */}
-                  <div className="space-y-2 pt-2 border-t border-border">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Total Subtotal ({summary.roomCount} room{summary.roomCount !== 1 ? 's' : ''}):</span>
-                      <span className="font-semibold">{formatCurrency(summary.subtotal)}</span>
-                    </div>
-                    {summary.discountAmt > 0 && (
-                      <div className="flex justify-between text-success">
-                        <span>Discount {summary.discount && summary.discount.type === 'percentage' ? `(${summary.discount.value}%)` : ''}:</span>
-                        <span className="font-semibold">-{formatCurrency(summary.discountAmt)}</span>
-                      </div>
-                    )}
-                    {summary.surchargeAmt > 0 && (
-                      <div className="flex justify-between text-warning">
-                        <span>Surcharge {summary.surcharge && summary.surcharge.type === 'percentage' ? `(${summary.surcharge.value}%)` : ''}:</span>
-                        <span className="font-semibold">+{formatCurrency(summary.surchargeAmt)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-lg font-bold pt-3 border-t border-border">
-                      <span>Total Amount:</span>
-                      <span className="text-primary">{formatCurrency(summary.total)}</span>
-                    </div>
+                <CardContent className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Nights:</span>
+                    <span className="font-semibold">{summary.nights}</span>
                   </div>
-                  {editingBooking && (
-                    <div className="pt-2 border-t border-border text-sm text-muted-foreground">
-                      <div>Created: {formatDateTime(editingBooking.createdAt)}</div>
-                      <div>Last updated: {formatDateTime(editingBooking.updatedAt || editingBooking.createdAt)}</div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Rate per Night:</span>
+                    <span className="font-semibold">{formatCurrency(summary.rate)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Subtotal:</span>
+                    <span className="font-semibold">{formatCurrency(summary.subtotal)}</span>
+                  </div>
+                  {summary.discountAmt > 0 && (
+                    <div className="flex justify-between text-success">
+                      <span>Discount:</span>
+                      <span className="font-semibold">-{formatCurrency(summary.discountAmt)}</span>
                     </div>
                   )}
+                  {summary.surchargeAmt > 0 && (
+                    <div className="flex justify-between text-warning">
+                      <span>Surcharge:</span>
+                      <span className="font-semibold">+{formatCurrency(summary.surchargeAmt)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-lg font-bold pt-2 border-t border-border">
+                    <span>Total:</span>
+                    <span className="text-primary">{formatCurrency(summary.total)}</span>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -1272,19 +756,6 @@ export default function Bookings() {
                       </SelectContent>
                     </Select>
                   </div>
-                  {/* Sort By */}
-                  <div className="w-full md:w-48">
-                    <Label htmlFor="sort-by" className="mb-2 block">Sort by</Label>
-                    <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'createdAt' | 'updatedAt')}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="createdAt">Created (newest first)</SelectItem>
-                        <SelectItem value="updatedAt">Last updated (newest first)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
 
                 {/* Date Range Filter */}
@@ -1346,126 +817,49 @@ export default function Bookings() {
             <Card key={booking.id} className="hover:shadow-lg transition-shadow">
               <CardContent className="pt-6">
                 <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    {/* Main Info */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                      <div>
-                        <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                          <User className="h-4 w-4" />
-                          <span>Guest</span>
-                        </div>
-                        <p className="font-semibold text-foreground">{getGuestName(booking.guestId)}</p>
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+                        <User className="h-4 w-4" />
+                        <span>Guest</span>
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                          <Calendar className="h-4 w-4" />
-                          <span>Dates</span>
-                        </div>
-                        <p className="font-semibold text-foreground">
-                          {formatDate(booking.checkInDate)} - {formatDate(booking.checkOutDate)}
-                        </p>
-                        <p className="text-sm text-muted-foreground">{booking.nights} night(s)</p>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground text-sm mb-1">Total / Paid / Balance</div>
-                        <p className="font-bold text-lg text-primary">{formatCurrency(booking.total)}</p>
-                        <div className="text-sm">
-                          <span className="text-success">Paid: {formatCurrency(bookingPayments[booking.id] || 0)}</span>
-                          <span className="mx-1">|</span>
-                          <span className="text-warning">Bal: {formatCurrency(booking.total - (bookingPayments[booking.id] || 0))}</span>
-                        </div>
-                        <Badge
-                          className={
-                            booking.paymentStatus === "Paid"
-                              ? "bg-success text-success-foreground"
-                              : "bg-warning text-warning-foreground"
-                          }
-                        >
-                          {booking.paymentStatus}
-                        </Badge>
-                      </div>
+                      <p className="font-semibold text-foreground">{getGuestName(booking.guestId)}</p>
                     </div>
-
-                    {/* Rooms Summary (Collapsed) */}
-                    {(() => {
-                      const roomsForBooking = bookingRoomsByBookingId.get(booking.id) ?? [];
-                      const roomSummary = (() => {
-                        const nums = roomsForBooking.map(r => r.roomNumber);
-                        if (nums.length === 0) return "—";
-                        if (nums.length <= 2) return nums.join(", ");
-                        return `${nums.slice(0, 2).join(", ")} (+${nums.length - 2})`;
-                      })();
-
-                      return (
-                        <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <DoorOpen className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground">
-                              <span className="font-semibold">Rooms:</span> {roomSummary}
-                            </span>
-                          </div>
-                          {roomsForBooking.length > 1 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => toggleExpanded(booking.id)}
-                              className="text-xs"
-                            >
-                              {expandedBookingIds.has(booking.id) ? "Hide rooms" : "View rooms"}
-                            </Button>
-                          )}
-                        </div>
-                      );
-                    })()}
-
-                    {/* Rooms Table (Expanded) */}
-                    {(() => {
-                      const roomsForBooking = bookingRoomsByBookingId.get(booking.id) ?? [];
-                      if (!expandedBookingIds.has(booking.id) || roomsForBooking.length === 0) return null;
-
-                      return (
-                        <div className="mt-4 pt-4 border-t border-border">
-                          <div className="mb-3">
-                            <span className="text-sm font-semibold text-muted-foreground">
-                              Rooms in this Booking ({roomsForBooking.length})
-                            </span>
-                          </div>
-                          
-                          <div className="border rounded-lg overflow-hidden">
-                            <table className="w-full text-sm">
-                              <thead className="bg-muted border-b">
-                                <tr>
-                                  <th className="text-left p-2 font-semibold">Room</th>
-                                  <th className="text-left p-2 font-semibold">Type</th>
-                                  <th className="text-right p-2 font-semibold">Rate/Night</th>
-                                  <th className="text-left p-2 font-semibold">Check-in</th>
-                                  <th className="text-left p-2 font-semibold">Check-out</th>
-                                  <th className="text-right p-2 font-semibold">Nights</th>
-                                  <th className="text-right p-2 font-semibold">Subtotal</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {roomsForBooking.map((br, idx) => {
-                                  const nights = daysBetweenIso(br.checkInDate, br.checkOutDate);
-                                  const subtotal = br.priceAtBooking * nights;
-                                  return (
-                                    <tr key={br.id} className={idx % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
-                                      <td className="p-2 font-medium">{br.roomNumber}</td>
-                                      <td className="p-2">{br.roomTypeName}</td>
-                                      <td className="text-right p-2">{formatCurrency(br.priceAtBooking)}</td>
-                                      <td className="p-2">{formatDate(br.checkInDate)}</td>
-                                      <td className="p-2">{formatDate(br.checkOutDate)}</td>
-                                      <td className="text-right p-2">{nights}</td>
-                                      <td className="text-right p-2 font-semibold">{formatCurrency(subtotal)}</td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      );
-                    })()}
+                    <div>
+                      <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+                        <DoorOpen className="h-4 w-4" />
+                        <span>Room</span>
+                      </div>
+                      <p className="font-semibold text-foreground">{getRoomNumber(booking.roomId)}</p>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+                        <Calendar className="h-4 w-4" />
+                        <span>Dates</span>
+                      </div>
+                      <p className="font-semibold text-foreground">
+                        {formatDate(booking.checkInDate)} - {formatDate(booking.checkOutDate)}
+                      </p>
+                      <p className="text-sm text-muted-foreground">{booking.nights} night(s)</p>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground text-sm mb-1">Total / Paid / Balance</div>
+                      <p className="font-bold text-lg text-primary">{formatCurrency(booking.total)}</p>
+                      <div className="text-sm">
+                        <span className="text-success">Paid: {formatCurrency(bookingPayments[booking.id] || 0)}</span>
+                        <span className="mx-1">|</span>
+                        <span className="text-warning">Bal: {formatCurrency(booking.total - (bookingPayments[booking.id] || 0))}</span>
+                      </div>
+                      <Badge
+                        className={
+                          booking.paymentStatus === "Paid"
+                            ? "bg-success text-success-foreground"
+                            : "bg-warning text-warning-foreground"
+                        }
+                      >
+                        {booking.paymentStatus}
+                      </Badge>
+                    </div>
                   </div>
                   <div className="flex gap-1 ml-4">
                     <Button
@@ -1486,9 +880,8 @@ export default function Bookings() {
                         const guest = await getItem<Guest>('guests', booking.guestId);
                         const room = await getItem<Room>('rooms', booking.roomId);
                         const roomType = await getItem<RoomType>('roomTypes', booking.roomTypeId);
-                        const bookingRoomsList = await getBookingRoomsByBookingId(booking.id);
-                        if (guest) {
-                          await printInvoice(booking, guest, room || null, roomType || null, bookingRoomsList.length > 0 ? bookingRoomsList : undefined);
+                        if (guest && room && roomType) {
+                          await printInvoice(booking, guest, room, roomType);
                         } else {
                           toast.error("Failed to load booking details");
                         }
