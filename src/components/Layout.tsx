@@ -25,24 +25,24 @@ export default function Layout({ children }: LayoutProps) {
     <div className="flex h-screen bg-background">
       {/* Sidebar - hidden in print */}
       <aside className="w-64 bg-sidebar border-r border-sidebar-border print:hidden">
-        <div className="p-6 border-b border-sidebar-border">
-          <div className="flex items-center gap-3">
-            <Bed className="h-8 w-8 text-sidebar-ring" />
+        <div className="px-4 py-3 border-b border-sidebar-border">
+          <div className="flex items-center gap-2">
+            <Bed className="h-7 w-7 text-sidebar-ring" />
             <div>
-              <h1 className="text-xl font-bold text-sidebar-foreground">DWBS HotelFlow</h1>
+              <h1 className="text-lg font-bold text-sidebar-foreground leading-tight">DWBS HotelFlow</h1>
               <p className="text-xs text-sidebar-foreground/70">Management System</p>
             </div>
           </div>
         </div>
         
-        <nav className="p-4">
-          <ul className="space-y-2">
+        <nav className="p-2">
+          <ul className="space-y-0.5">
             {navItems.map((item) => (
               <li key={item.to}>
                 <NavLink
                   to={item.to}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                    `flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
                       isActive
                         ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                         : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
