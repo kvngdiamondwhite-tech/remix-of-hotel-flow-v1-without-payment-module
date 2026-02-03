@@ -4,7 +4,7 @@ import { bookingWindowMs, MinimalSettings } from './dates';
 import { getSettings } from './settings';
 
 const DB_NAME = 'HotelManagementDB';
-const DB_VERSION = 1002;
+const DB_VERSION = 1004;
 
 export interface RoomType {
   id: string;
