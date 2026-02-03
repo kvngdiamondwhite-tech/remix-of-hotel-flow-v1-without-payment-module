@@ -35,21 +35,21 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         </div>
         
-        <nav className="p-4">
-          <ul className="space-y-2">
+        <nav className="p-2">
+          <ul className="space-y-0.5">
             {navItems.map((item) => (
               <li key={item.to}>
                 <NavLink
                   to={item.to}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                    `flex items-center gap-2 px-3 py-1.5 rounded-md transition-all text-sm ${
                       isActive
                         ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                         : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                     }`
                   }
                 >
-                  <item.icon className="h-5 w-5" />
+                  <item.icon className="h-4 w-4" />
                   <span>{item.label}</span>
                 </NavLink>
               </li>
